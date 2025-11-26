@@ -5,8 +5,89 @@
 #include <sstream>
 #include <SFML/Graphics.hpp>
 #include <SFML/Window/Event.hpp>
-#include <vector>
-#include <queue>
+
+// ==== BEGIN: Custom STL Replacements ====
+template<typename T, int N = 256> struct SimpleVector {
+    T data[N];
+    int sz;
+    SimpleVector() : sz(0) {}
+    void push_back(const T& v) { if (sz < N) data[sz++] = v; }
+    void clear() { sz = 0; }
+    int size() const { return sz; }
+    T& operator[](int i) { return data[i]; }
+    const T& operator[](int i) const { return data[i]; }
+    T* begin() { return data; }
+    T* end() { return data + sz; }
+};
+
+template<typename T, int N = 256> struct SimpleQueue {
+    T data[N];
+    int front, back;
+    SimpleQueue() : front(0), back(0) {}
+    void push(const T& v) { if ((back+1)%N != front) { data[back] = v; back = (back+1)%N; } }
+    void pop() { if (!empty()) front = (front+1)%N; }
+    T& top() { return data[front]; }
+    bool empty() const { return front == back; }
+};
+
+template<typename T, int N = 256> struct SimplePriorityQueue {
+    T data[N];
+    int sz;
+    SimplePriorityQueue() : sz(0) {}
+    void push(const T& v) {
+        int i = sz++;
+        data[i] = v;
+        while (i > 0 && data[(i-1)/2] > data[i]) {
+            T tmp = data[i]; data[i] = data[(i-1)/2]; data[(i-1)/2] = tmp;
+            i = (i-1)/2;
+        }
+    }
+    void pop() {
+        if (sz == 0) return;
+        data[0] = data[--sz];
+        int i = 0;
+        while (2*i+1 < sz) {
+            int j = 2*i+1;
+            if (j+1 < sz && data[j+1] < data[j]) j++;
+            if (data[i] < data[j]) break;
+            T tmp = data[i]; data[i] = data[j]; data[j] = tmp;
+            i = j;
+        }
+    }
+    T& top() { return data[0]; }
+    bool empty() const { return sz == 0; }
+};
+
+template<typename K, typename V, int N = 256> struct SimpleMap {
+    K keys[N];
+    V values[N];
+    int sz;
+    SimpleMap() : sz(0) {}
+    V& operator[](const K& k) {
+        for (int i = 0; i < sz; ++i) if (keys[i] == k) return values[i];
+        keys[sz] = k; values[sz] = V(); return values[sz++];
+    }
+    struct iterator {
+        K* k; V* v;
+        iterator(K* kk, V* vv) : k(kk), v(vv) {}
+        iterator& operator++() { ++k; ++v; return *this; }
+        bool operator!=(const iterator& o) const { return k != o.k; }
+        std::pair<K,V> operator*() const { return {*k, *v}; }
+    };
+    iterator begin() { return iterator(keys, values); }
+    iterator end() { return iterator(keys+sz, values+sz); }
+    int size() const { return sz; }
+    bool contains(const K& k) const { for (int i = 0; i < sz; ++i) if (keys[i] == k) return true; return false; }
+    int find(const K& k) const { for (int i = 0; i < sz; ++i) if (keys[i] == k) return i; return -1; }
+};
+
+inline int my_min(int a, int b) { return a < b ? a : b; }
+inline int my_max(int a, int b) { return a > b ? a : b; }
+inline float my_min(float a, float b) { return a < b ? a : b; }
+inline float my_max(float a, float b) { return a > b ? a : b; }
+inline char my_tolower(char c) { return (c >= 'A' && c <= 'Z') ? (c + 32) : c; }
+inline bool my_isalnum(char c) { return (c >= 'A' && c <= 'Z')||(c >= 'a' && c <= 'z')||(c >= '0' && c <= '9'); }
+// ==== END: Custom STL Replacements ====
 #define TOTALNUMBEROFPORTS 40
 #define MAX_COST 999999999
 
@@ -48,17 +129,26 @@ struct graphVerticePort {
     // Queue shipManagement; // TODO> add this as a queue for ship management by making your own priority queue(heap)
     graphEdgeRoute* routeHead;
     sf::Vector2f position; // For SFML rendering
+    float latitude; // optional
+    float longitude; // optional
+    bool hasCoordinates;
 
     graphVerticePort() {
         this->portName = "";
         this->dailyPortCharge = 0;
         this->routeHead = nullptr;
+        this->latitude = 0.0f;
+        this->longitude = 0.0f;
+        this->hasCoordinates = false;
     }
 
     graphVerticePort(string portName, int dailyPortCharge) {
         this->portName = portName;
         this->dailyPortCharge = dailyPortCharge;
         this->routeHead = nullptr;
+        this->latitude = 0.0f;
+        this->longitude = 0.0f;
+        this->hasCoordinates = false;
     }
 
 };
@@ -117,11 +207,15 @@ struct PQNode { // priority queue node for dijikstra n a*
     int portIndex;
     int cost;
     int heuristic;
-    
+
+    PQNode() : portIndex(0), cost(0), heuristic(0) {} // Default constructor for SimplePriorityQueue
     PQNode(int idx, int c, int h = 0) : portIndex(idx), cost(c), heuristic(h) {}
-    
+
     bool operator>(const PQNode& other) const {
         return (cost + heuristic) > (other.cost + other.heuristic);
+    }
+    bool operator<(const PQNode& other) const {
+        return (cost + heuristic) < (other.cost + other.heuristic);
     }
 };
 
@@ -130,6 +224,7 @@ struct oceanRouteGraph {
     graphVerticePort** graphPorts;
     int currentSize;
     int capacity;
+    SimpleMap<std::string, int> portIndexMap;
     // ====== GLOBAL STATE FLAGS FOR ACTIONS ======
     bool runDirectRoutes = false;
     bool runCheapest = false;
@@ -146,6 +241,7 @@ struct oceanRouteGraph {
     int selectedOrigin = -1;
     int selectedDestination = -1;
     string selectedCompany = "";
+    bool useMercatorProjection = true;
 
 
     oceanRouteGraph() {
@@ -157,6 +253,8 @@ struct oceanRouteGraph {
         }
         highlightedPath = nullptr;
         highlightedPathSize = 0;
+        // by default, no coordinates loaded
+        useMercatorProjection = true;
     }
 
     ~oceanRouteGraph() {
@@ -331,8 +429,23 @@ struct oceanRouteGraph {
     }
 
     bool searchingPortExistence(string sourceName, int& indexOfExisitingPort) {
+        string key = sourceName;
+        // normalize
+        auto normalize = [](const string& s) {
+            string out;
+            for (char c : s) {
+                if (my_isalnum(c)) out.push_back(my_tolower(c));
+            }
+            return out;
+        };
+        string normalized = normalize(key);
+        int idx = portIndexMap.find(normalized);
+        if (idx != -1) {
+            indexOfExisitingPort = portIndexMap[normalized];
+            return true;
+        }
         for (int i = 0; i < currentSize; i++) {
-            if (graphPorts[i]->portName == sourceName) {
+            if (graphPorts[i] != nullptr && graphPorts[i]->portName == sourceName) {
                 indexOfExisitingPort = i;
                 return true;
             }
@@ -428,8 +541,31 @@ struct oceanRouteGraph {
                 // add the currentNode to the array at current size
                 graphPorts[currentSize] = currentNode;
                 graphPorts[currentSize]->portName = sourceName;
+                // Add to lookup map (normalized key)
+                auto normalize = [](const string& s) {
+                    string out;
+                    for (char c : s) if (my_isalnum(c)) out.push_back(my_tolower(c));
+                    return out;
+                };
+                portIndexMap[normalize(sourceName)] = currentSize;
                 addAtEndOfLinkedList(graphPorts[currentSize]->routeHead, destinationName, date, arrivalTime, departureTime, voyageCost, shippingCompanyName);
                 currentSize++;
+            }
+            // Ensure destination is also present as a vertex (even if it has no outgoing edges)
+            int destIndex = -1;
+            if (!searchingPortExistence(destinationName, destIndex)) {
+                if (currentSize < capacity) {
+                    graphVerticePort* destNode = new graphVerticePort(destinationName, 0);
+                    graphPorts[currentSize] = destNode;
+                    // normalized map key
+                    auto normalize = [](const string& s) {
+                        string out;
+                        for (char c : s) if (my_isalnum(c)) out.push_back(my_tolower(c));
+                        return out;
+                    };
+                    portIndexMap[normalize(destinationName)] = currentSize;
+                    currentSize++;
+                }
             }
 
             // Step 4 completed
@@ -479,6 +615,9 @@ struct oceanRouteGraph {
 
         chargesFile.close();
         //step 5 complete
+
+        // Try to load coordinates file if present (optional)
+        loadPortCoordinates("./PortCoords.txt");
     }
 
 
@@ -493,7 +632,11 @@ struct oceanRouteGraph {
                 continue;
             }
 
-            cout << graphPorts[i]->portName << " (" << graphPorts[i]->dailyPortCharge << ") -> ";
+            cout << graphPorts[i]->portName << " (" << graphPorts[i]->dailyPortCharge << ")";
+            if (graphPorts[i]->hasCoordinates) {
+                cout << " [" << graphPorts[i]->latitude << "," << graphPorts[i]->longitude << "]";
+            }
+            cout << " -> ";
             if (graphPorts[i]->routeHead == nullptr) {
                 cout << " (No Route)";
                 continue;
@@ -509,6 +652,17 @@ struct oceanRouteGraph {
     }
     
     int getPortIndex(const string& portName) { // helper function 
+        // use normalized map lookup first
+        auto normalize = [](const string& s) {
+            string out;
+            for (char c : s) {
+                if (my_isalnum(c)) out.push_back(my_tolower(c));
+            }
+            return out;
+        };
+        string key = normalize(portName);
+        int idx = portIndexMap.find(key);
+        if (idx != -1) return portIndexMap[key];
         for (int i = 0; i < currentSize; i++) {
             if (graphPorts[i] != nullptr && graphPorts[i]->portName == portName) {
                 return i;
@@ -580,7 +734,7 @@ struct oceanRouteGraph {
             visited[i] = false;
         }
         
-        priority_queue<PQNode, vector<PQNode>, greater<PQNode>> pq;
+        SimplePriorityQueue<PQNode, 256> pq;
         
         dist[startIndex] = 0;
         pq.push(PQNode(startIndex, 0));
@@ -664,7 +818,7 @@ struct oceanRouteGraph {
             visited[i] = false;
         }
         
-        priority_queue<PQNode, vector<PQNode>, greater<PQNode>> pq;
+        SimplePriorityQueue<PQNode, 256> pq;
         
         gScore[startIndex] = 0;
         fScore[startIndex] = calculateHeuristic(startIndex, endIndex);
@@ -793,18 +947,108 @@ struct oceanRouteGraph {
     void assignPositions(float width, float height) {
         if (currentSize == 0) return;
 
+        // If coordinates exist, map lat/lon to screen position using Mercator projection
+        bool anyCoords = false;
+        for (int i = 0; i < currentSize; i++) {
+            if (graphPorts[i] != nullptr && graphPorts[i]->hasCoordinates) {
+                anyCoords = true;
+                break;
+            }
+        }
+
+        if (anyCoords) {
+            // Improved Mercator projection for accurate world map alignment
+            float mapWidth = width;
+            float mapHeight = height;
+            for (int i = 0; i < currentSize; i++) {
+                if (graphPorts[i] == nullptr) continue;
+                if (graphPorts[i]->hasCoordinates) {
+                    float lon = graphPorts[i]->longitude;
+                    float lat = graphPorts[i]->latitude;
+                    // Clamp latitude to avoid infinity at poles
+                    if (lat > 89.5f) lat = 89.5f;
+                    if (lat < -89.5f) lat = -89.5f;
+                    float x = (lon + 180.0f) / 360.0f * mapWidth;
+                    float latRad = lat * 3.14159265358979323846f / 180.0f;
+                    float mercN = std::log(std::tan((3.14159265358979323846f / 4.0f) + (latRad / 2.0f)));
+                    float y = (mapHeight / 2.0f) - (mapWidth * mercN / (2.0f * 3.14159265358979323846f));
+                    graphPorts[i]->position = sf::Vector2f(x, y);
+                } else {
+                    // fallback to radial layout for ports without coordinates
+                    float centerX = width / 2.0f;
+                    float centerY = height / 2.0f;
+                    float radiusX = width * 0.40f;
+                    float radiusY = height * 0.45f;
+                    float angle = (2.0f * 3.14159f * static_cast<float>(i)) / static_cast<float>(currentSize);
+                    graphPorts[i]->position.x = centerX + radiusX * std::cos(angle);
+                    graphPorts[i]->position.y = centerY + radiusY * std::sin(angle);
+                }
+            }
+            return;
+        }
+
+        // Default radial layout
         float centerX = width / 2.0f;
         float centerY = height / 2.0f;
-        float radiusX = width * 0.40f;  // Changed from 0.35f
-        float radiusY = height * 0.45f;  // Changed from 0.35f
+        float radiusX = width * 0.40f;
+        float radiusY = height * 0.45f;
 
         for (int i = 0; i < currentSize; i++) {
             if (graphPorts[i] == nullptr) continue;
-
             float angle = (2.0f * 3.14159f * static_cast<float>(i)) / static_cast<float>(currentSize);
             graphPorts[i]->position.x = centerX + radiusX * std::cos(angle);
             graphPorts[i]->position.y = centerY + radiusY * std::sin(angle);
         }
+    }
+
+    // Convert lat/lon (degrees) to screen coordinates
+    static sf::Vector2f latLonToScreen(float lat, float lon, float width, float height) {
+        float x = (lon + 180.0f) / 360.0f * width;
+        float y = (90.0f - lat) / 180.0f * height;
+        return sf::Vector2f(x, y);
+    }
+
+    bool loadPortCoordinates(const string& fileNameForCoords) {
+        ifstream file(fileNameForCoords);
+        if (!file.is_open()) {
+            return false;
+        }
+        string line;
+        while (getline(file, line)) {
+            if (line.empty()) continue;
+            string portName;
+            double lat = 0.0, lon = 0.0;
+            stringstream ss(line);
+            if (!(ss >> portName >> lat >> lon)) {
+                // Could be a multi-word port name, try to parse with last two tokens as lat lon
+                vector<string> tokens;
+                string token;
+                ss.clear(); ss.str(line);
+                while (ss >> token) tokens.push_back(token);
+                if (tokens.size() >= 3) {
+                    lon = stod(tokens.back()); tokens.pop_back();
+                    lat = stod(tokens.back()); tokens.pop_back();
+                    portName = tokens[0];
+                    for (size_t idx = 1; idx < tokens.size(); ++idx) {
+                        portName += " ";
+                        portName += tokens[idx];
+                    }
+                } else {
+                    continue;
+                }
+            }
+            // find the port and set coordinates
+            for (int i = 0; i < currentSize; ++i) {
+                if (graphPorts[i] != nullptr && graphPorts[i]->portName == portName) {
+                    graphPorts[i]->latitude = static_cast<float>(lat);
+                    graphPorts[i]->longitude = static_cast<float>(lon);
+                    graphPorts[i]->hasCoordinates = true;
+                    break;
+                }
+            }
+        }
+        file.close();
+        return true;
     }
 
 
@@ -828,7 +1072,7 @@ struct oceanRouteGraph {
         sf::VertexArray curve(sf::PrimitiveType::LineStrip, segments + 1);
 
         float thickness = 2.0f + (static_cast<float>(cost) / 500.0f);
-        thickness = std::min(thickness, 6.0f);
+        thickness = my_min(thickness, 6.0f);
 
         for (int i = 0; i <= segments; i++) {
             float t = static_cast<float>(i) / static_cast<float>(segments);
@@ -859,18 +1103,15 @@ struct oceanRouteGraph {
         window.draw(arrow);
     }
 
-    void handlePanelAction(const string& action)
+    void handlePanelAction(const string& action, bool& showQueryPanel)
     {
         cout << "Action pressed: " << action << endl;
 
-        if (action == "Find Direct Routes") {
-            runDirectRoutes = true;
-            // TODO: Implement direct routes finding
-        }
-        else if (action == "Find Cheapest Route") {
+        if (action == "Find Cheapest Route") {
             runCheapest = true;
             if (selectedOrigin != -1 && selectedDestination != -1) {
                 findCheapestRoute(selectedOrigin, selectedDestination, selectedCompany);
+                showQueryPanel = false;
             } else {
                 cout << "Error: Please select both origin and destination ports first." << endl;
             }
@@ -879,6 +1120,7 @@ struct oceanRouteGraph {
             runFastest = true;
             if (selectedOrigin != -1 && selectedDestination != -1) {
                 findFastestRoute(selectedOrigin, selectedDestination, selectedCompany);
+                showQueryPanel = false;
             } else {
                 cout << "Error: Please select both origin and destination ports first." << endl;
             }
@@ -899,10 +1141,26 @@ struct oceanRouteGraph {
 
 
     void visualizeGraph(int windowWidth = 1400, int windowHeight = 900) {
+        // Try to load optional coordinates and world map before assigning positions
+        // If a PortCoords.txt file exists in the workspace, load it
+        loadPortCoordinates("./PortCoords.txt");
         assignPositions(static_cast<float>(windowWidth), static_cast<float>(windowHeight));
 
         sf::RenderWindow window(sf::VideoMode({ static_cast<unsigned int>(windowWidth), static_cast<unsigned int>(windowHeight) }), "Ocean Route Network - Interactive Graph", sf::Style::Close);
         window.setFramerateLimit(100);
+
+        sf::Texture mapTexture;
+        sf::Sprite* mapSprite = nullptr;
+        bool mapLoaded = false;
+        if (mapTexture.loadFromFile("./world_map.png")) {
+            mapSprite = new sf::Sprite(mapTexture);
+            // Scale to window size
+            sf::Vector2u texSize = mapTexture.getSize();
+            float scaleX = static_cast<float>(windowWidth) / static_cast<float>(texSize.x);
+            float scaleY = static_cast<float>(windowHeight) / static_cast<float>(texSize.y);
+            mapSprite->setScale(sf::Vector2f(scaleX, scaleY));
+            mapLoaded = true;
+        }
 
         sf::Font font;
         if (!font.openFromFile("/System/Library/Fonts/Helvetica.ttc")) {
@@ -914,14 +1172,12 @@ struct oceanRouteGraph {
             }
         }
 
+
         // State variables for future features
         int hoveredPort = -1;
         int selectedPort = -1; // For route highlighting and pathfinding
         // Note: selectedOrigin, selectedDestination, and selectedCompany are now member variables
         string selectedDate = ""; // Selected date for filtering
-        //vector<int> highlightedPath; // For optimal path visualization
-        //vector<int> exploredPorts; // For algorithm exploration visualization
-        //vector<pair<int, int>> highlightedRoutes; // For filtered route display
         float animationTime = 0.0f; // For sequential animations
         sf::Clock animationClock; // For timing animations
 
@@ -930,22 +1186,25 @@ struct oceanRouteGraph {
         int hoveredButton = -1; // Which button is being hovered (-1 = none)
         bool selectingOrigin = true; // Toggle between selecting origin/destination
 
+        // Algorithm toggle state
+        bool useAStar = false; // false = Dijkstra, true = A*
+
+        // Path highlighting
+        std::vector<int> highlightedPath;
+
         // Button positions for click detection (will be set during rendering)
         struct ButtonBounds {
             float x, y, width, height;
             string action;
-            
         };
-        vector<ButtonBounds> buttonBounds;
+        SimpleVector<ButtonBounds, 16> buttonBounds;
 
         // Toggle button bounds
         ButtonBounds toggleButtonBounds;
 
         while (window.isOpen()) {
-
             while (std::optional<sf::Event> event = window.pollEvent()) {
-
-                // --- FIX: Recalculate mouse position here ---
+                // Recalculate mouse position here
                 sf::Vector2i mp = sf::Mouse::getPosition(window);
                 sf::Vector2f clickPosF(static_cast<float>(mp.x), static_cast<float>(mp.y));
 
@@ -955,19 +1214,16 @@ struct oceanRouteGraph {
 
                 // Mouse click handling
                 if (event->is<sf::Event::MouseButtonPressed>()) {
-
                     float mx = clickPosF.x;
                     float my = clickPosF.y;
-
-                    // --- Toggle query panel button click ---
+                    // Toggle query panel button click
                     if (mx >= toggleButtonBounds.x && mx <= toggleButtonBounds.x + toggleButtonBounds.width &&
                         my >= toggleButtonBounds.y && my <= toggleButtonBounds.y + toggleButtonBounds.height)
                     {
                         showQueryPanel = !showQueryPanel;
                         continue;
                     }
-
-                    // --- If panel is open: check panel action buttons ---
+                    // If panel is open: check panel action buttons
                     if (showQueryPanel)
                     {
                         for (auto& btn : buttonBounds)
@@ -975,42 +1231,34 @@ struct oceanRouteGraph {
                             if (mx >= btn.x && mx <= btn.x + btn.width &&
                                 my >= btn.y && my <= btn.y + btn.height)
                             {
-                                handlePanelAction(btn.action);
+                                handlePanelAction(btn.action, showQueryPanel);
                             }
                         }
-
-                        // Clicking inside date box â†’ start typing date
-                        
-                            float panelX = (windowWidth - 400.0f) / 2.0f;
-                            float panelY = 100.0f;
-
-                            float dateBoxX = panelX + 20.0f;
-                            float dateBoxY = panelY + 60.0f + 75.0f + 75.0f; // based on your offsets
-
-                            // If clicked inside date text box
-                            if (mx >= dateBoxX && mx <= dateBoxX + 360.0f &&
-                                my >= dateBoxY + 25.0f && my <= dateBoxY + 60.0f)
-                            {
-                                typingDate = true;
-                                typingCompany = false;
-                                continue;
-                            }
-
-                            // If clicked inside company text box
-                            float companyBoxY = dateBoxY + 75.0f;
-                            if (mx >= dateBoxX && mx <= dateBoxX + 360.0f &&
-                                my >= companyBoxY + 25.0f && my <= companyBoxY + 60.0f)
-                            {
-                                typingCompany = true;
-                                typingDate = false;
-                                continue;
-                            }
-                 
-
+                        // Clicking inside date box → start typing date
+                        float panelX = (windowWidth - 400.0f) / 2.0f;
+                        float panelY = 100.0f;
+                        float dateBoxX = panelX + 20.0f;
+                        float dateBoxY = panelY + 60.0f + 75.0f + 75.0f;
+                        // If clicked inside date text box
+                        if (mx >= dateBoxX && mx <= dateBoxX + 360.0f &&
+                            my >= dateBoxY + 25.0f && my <= dateBoxY + 60.0f)
+                        {
+                            typingDate = true;
+                            typingCompany = false;
+                            continue;
+                        }
+                        // If clicked inside company text box
+                        float companyBoxY = dateBoxY + 75.0f;
+                        if (mx >= dateBoxX && mx <= dateBoxX + 360.0f &&
+                            my >= companyBoxY + 25.0f && my <= companyBoxY + 60.0f)
+                        {
+                            typingCompany = true;
+                            typingDate = false;
+                            continue;
+                        }
                         continue;
                     }
-
-                    // --- If panel closed: allow ports to be selected ---
+                    // If panel closed: allow ports to be selected
                     if (!showQueryPanel)
                     {
                         if (hoveredPort != -1)
@@ -1027,14 +1275,11 @@ struct oceanRouteGraph {
                         }
                     }
                 }
-
-
-                // ================= KEYBOARD INPUT HANDLING =================
+                // KEYBOARD INPUT HANDLING
                 if (event->is<sf::Event::TextEntered>()) {
                     const auto* textEvent = event->getIf<sf::Event::TextEntered>();
                     if (textEvent) {
                         char c = static_cast<char>(textEvent->unicode);
-
                         // Ignore control characters except backspace
                         if (c == 8) { // Backspace
                             if (typingDate && !selectedDate.empty()) selectedDate.pop_back();
@@ -1044,17 +1289,26 @@ struct oceanRouteGraph {
                             if (typingDate) {
                                 if (selectedDate.size() < 10)   // dd/mm/yyyy
                                     selectedDate += c;
-
                                 cout << selectedDate << endl;
                             }
                             if (typingCompany) {
                                 if (selectedCompany.size() < 20)
                                     selectedCompany += c;
-
                                 cout << selectedCompany << endl;
                             }
-
                         }
+                    }
+                }
+                if (event->is<sf::Event::KeyPressed>()) {
+                    const auto* keyEvent = event->getIf<sf::Event::KeyPressed>();
+                    // Fix for SFML key code: use static_cast<int>('M') if sf::Keyboard::M is not defined
+                    #ifdef SFML_KEYBOARD_M
+                    if (keyEvent && keyEvent->code == sf::Keyboard::M) {
+                    #else
+                    if (keyEvent && keyEvent->code == static_cast<sf::Keyboard::Key>('M')) {
+                    #endif
+                        useMercatorProjection = !useMercatorProjection;
+                        assignPositions(static_cast<float>(windowWidth), static_cast<float>(windowHeight));
                     }
                 }
          
@@ -1067,13 +1321,20 @@ struct oceanRouteGraph {
                     if (graphPorts[i] == nullptr) continue;
                     float dx = mousePosF.x - graphPorts[i]->position.x;
                     float dy = mousePosF.y - graphPorts[i]->position.y;
-                    if (dx * dx + dy * dy < 900.0f) {
+                    float nodeRadius = 12.0f;
+                    float hoverThresh = (nodeRadius + 10.0f) * (nodeRadius + 10.0f);
+                    if (dx * dx + dy * dy < hoverThresh) {
                         hoveredPort = i;
                         break;
                     }
                 }
 
-                window.clear(sf::Color(15, 20, 35));
+                if (mapLoaded) {
+                    window.clear(sf::Color::Black);
+                    if (mapSprite) window.draw(*mapSprite);
+                } else {
+                    window.clear(sf::Color(15, 20, 35));
+                }
                 // Reset for this frame
                 buttonBounds.clear();
                 hoveredButton = -1;
@@ -1104,6 +1365,13 @@ struct oceanRouteGraph {
                 legend.setFillColor(sf::Color(180, 180, 180));
                 legend.setPosition(sf::Vector2f(30.0f, 50.0f));
                 window.draw(legend);
+
+                // Projection indicator
+                string projTextStr = useMercatorProjection ? "Projection: Mercator (press M to toggle)" : "Projection: Equirectangular (press M to toggle)";
+                sf::Text projText(font, projTextStr, 12);
+                projText.setFillColor(sf::Color(200, 210, 230));
+                projText.setPosition(sf::Vector2f(30.0f, 68.0f));
+                window.draw(projText);
 
                 // ================== TOGGLE QUERY PANEL BUTTON ==================
                 sf::RectangleShape toggleButton(sf::Vector2f(180.f, 40.f));
@@ -1281,6 +1549,33 @@ struct oceanRouteGraph {
                         {"Simulate Journey", sf::Color(255, 140, 140)}
                     };
 
+                    // --- ALGORITHM TOGGLE BUTTON ---
+                    Button algoToggleBtn = { useAStar ? "Algorithm: A* (Click to switch)" : "Algorithm: Dijkstra (Click to switch)", sf::Color(80, 120, 200) };
+                    float algoBtnYOffset = yOffset;
+                    ButtonBounds algoBtnBounds;
+                    algoBtnBounds.x = panelX + 20.0f;
+                    algoBtnBounds.y = yOffset;
+                    algoBtnBounds.width = 360.0f;
+                    algoBtnBounds.height = 45.0f;
+                    algoBtnBounds.action = "ToggleAlgorithm";
+                    buttonBounds.push_back(algoBtnBounds);
+
+                    sf::RectangleShape algoBtnShape(sf::Vector2f(360.0f, 45.0f));
+                    algoBtnShape.setPosition(sf::Vector2f(panelX + 20.0f, yOffset));
+                    algoBtnShape.setFillColor(algoToggleBtn.color);
+                    algoBtnShape.setOutlineThickness(2.0f);
+                    algoBtnShape.setOutlineColor(sf::Color(255, 255, 255, 100));
+                    window.draw(algoBtnShape);
+
+                    sf::Text algoBtnText(font, algoToggleBtn.label, 15);
+                    algoBtnText.setFillColor(sf::Color(255, 255, 255));
+                    algoBtnText.setStyle(sf::Text::Bold);
+                    sf::FloatRect algoTextBounds = algoBtnText.getLocalBounds();
+                    algoBtnText.setPosition(sf::Vector2f(panelX + 200.0f - algoTextBounds.size.x / 2.0f, yOffset + 12.0f));
+                    window.draw(algoBtnText);
+
+                    yOffset += 55.0f;
+
                     for (int i = 0; i < 6; i++) {
                         // Store button bounds for click detection
                         ButtonBounds btnBounds;
@@ -1307,9 +1602,9 @@ struct oceanRouteGraph {
                         // Hover effect
                         if (hoveredButton == i) {
                             button.setFillColor(sf::Color(
-                                std::min(buttons[i].color.r + 40, 255),
-                                std::min(buttons[i].color.g + 40, 255),
-                                std::min(buttons[i].color.b + 40, 255)
+                                my_min(buttons[i].color.r + 40, 255),
+                                my_min(buttons[i].color.g + 40, 255),
+                                my_min(buttons[i].color.b + 40, 255)
                             ));
                             button.setOutlineThickness(3.0f);
                             button.setOutlineColor(sf::Color(255, 255, 255, 200));
@@ -1332,6 +1627,21 @@ struct oceanRouteGraph {
                     }
 
                     yOffset += 10.0f;
+
+                    // --- AUTO PATHFINDING & HIGHLIGHTING ---
+                    // (No longer clear highlightedPath here; keep it until origin/dest changes or new search)
+                    if (selectedOrigin != -1 && selectedDestination != -1 && highlightedPath.empty()) {
+                        if (useAStar) {
+                            findFastestRoute(selectedOrigin, selectedDestination, selectedCompany);
+                        } else {
+                            findCheapestRoute(selectedOrigin, selectedDestination, selectedCompany);
+                        }
+                        if (currentPath.found && currentPath.path != nullptr && currentPath.pathSize > 0) {
+                            for (int i = 0; i < currentPath.pathSize; ++i) {
+                                highlightedPath.push_back(currentPath.path[i]);
+                            }
+                        }
+                    }
 
                     // Status message area with dynamic messages
                     sf::RectangleShape statusBox(sf::Vector2f(360.0f, 70.0f));
@@ -1376,6 +1686,7 @@ struct oceanRouteGraph {
 
                 if (!showQueryPanel) {
                     // Draw all edges (routes) with support for highlighting
+                    // Draw all edges (routes) with support for highlighting
                     for (int i = 0; i < currentSize; i++) {
                         if (graphPorts[i] == nullptr) continue;
 
@@ -1389,23 +1700,31 @@ struct oceanRouteGraph {
                                 }
                             }
 
-
-                            
-
                             if (destIndex != -1) {
-                                sf::Color edgeColor = sf::Color(255, 100, 100, 150);
-
-                                // add graphics for dijikstra/a* //
-
+                                // Highlight if this edge is part of the highlighted path
+                                bool isHighlighted = false;
+                                for (size_t k = 1; k < highlightedPath.size(); ++k) {
+                                    if ((highlightedPath[k-1] == i && highlightedPath[k] == destIndex)) {
+                                        isHighlighted = true;
+                                        break;
+                                    }
+                                }
+                                sf::Color edgeColor;
+                                if (isHighlighted) {
+                                    if (useAStar) {
+                                        edgeColor = sf::Color(255, 0, 200, 220); // Magenta for A*
+                                    } else {
+                                        edgeColor = sf::Color(120, 60, 200, 220); // Dark purple for Dijkstra
+                                    }
+                                } else {
+                                    edgeColor = sf::Color(120, 30, 30, 90);
+                                }
                                 if (hoveredPort == i) {
                                     edgeColor = getCostColor(route->voyageCost);
                                     edgeColor.a = 255;
                                 }
-
                                 drawCurvedArrow(window, graphPorts[i]->position, graphPorts[destIndex]->position, edgeColor, route->voyageCost);
                             }
-                            
-
                             route = route->next;
                         }
                     }
@@ -1419,10 +1738,16 @@ struct oceanRouteGraph {
                         bool isHovered = (hoveredPort == i);
                         bool isExplored = false;
                         
-                        // add graphics for dijikstra/a* //
+
+                        // Highlight node if in highlightedPath
+                        bool isHighlightedNode = false;
+                        for (int idx : highlightedPath) {
+                            if (idx == i) { isHighlightedNode = true; break; }
+                        }
+
 
                         // Outer glow with enhanced brightness for special states
-                        float glowRadius = 35.0f;
+                        float glowRadius = 20.0f;
                         sf::Color glowColor(80, 150, 255, 40);
 
                         if (isOrigin) {
@@ -1437,25 +1762,29 @@ struct oceanRouteGraph {
                             glowRadius = 40.0f;
                             glowColor = sf::Color(80, 150, 255, 80);
                         }
-                        // Future: Add glow effects for isExplored state
+                        else if (isHighlightedNode) {
+                            glowRadius = 35.0f;
+                            glowColor = sf::Color(80, 255, 100, 80);
+                        }
 
-                        sf::CircleShape glow(glowRadius);
-                        glow.setPosition(sf::Vector2f(graphPorts[i]->position.x - glowRadius, graphPorts[i]->position.y - glowRadius));
+                        sf::CircleShape glow(glowRadius * 0.5f);
+                        glow.setPosition(sf::Vector2f(graphPorts[i]->position.x - glowRadius * 0.5f, graphPorts[i]->position.y - glowRadius * 0.5f));
                         glow.setFillColor(glowColor);
                         window.draw(glow);
 
-                        // Main node with state-based coloring
-                        sf::CircleShape node(25.0f);
-                        node.setPosition(sf::Vector2f(graphPorts[i]->position.x - 25.0f, graphPorts[i]->position.y - 25.0f));
+
+                        // Main node with state-based coloring (half size)
+                        sf::CircleShape node(6.0f);
+                        node.setPosition(sf::Vector2f(graphPorts[i]->position.x - 12.5f, graphPorts[i]->position.y - 12.5f));
 
                         if (isOrigin) {
                             node.setFillColor(sf::Color(100, 255, 150));
-                            node.setOutlineThickness(4.0f);
+                            node.setOutlineThickness(3.0f);
                             node.setOutlineColor(sf::Color(150, 255, 180));
                         }
                         else if (isDestination) {
                             node.setFillColor(sf::Color(255, 180, 100));
-                            node.setOutlineThickness(4.0f);
+                            node.setOutlineThickness(3.0f);
                             node.setOutlineColor(sf::Color(255, 220, 150));
                         }
                         else if (isHovered) {
@@ -1463,13 +1792,16 @@ struct oceanRouteGraph {
                             node.setOutlineThickness(3.0f);
                             node.setOutlineColor(sf::Color(200, 150, 255));
                         }
+                        else if (isHighlightedNode) {
+                            node.setFillColor(sf::Color(80, 255, 100));
+                            node.setOutlineThickness(3.0f);
+                            node.setOutlineColor(sf::Color(120, 255, 150));
+                        }
                         else {
                             node.setFillColor(sf::Color(60, 120, 200));
                             node.setOutlineThickness(2.0f);
                             node.setOutlineColor(sf::Color(100, 160, 240));
                         }
-                        // Future: Add colors for isExplored (yellow)
-
                         window.draw(node);
 
                         // Port name label with indicator for selected ports
@@ -1481,51 +1813,12 @@ struct oceanRouteGraph {
                         portName.setFillColor(sf::Color(220, 230, 255));
                         portName.setStyle(sf::Text::Bold);
                         sf::FloatRect textBounds = portName.getLocalBounds();
-                        portName.setPosition(sf::Vector2f(graphPorts[i]->position.x - textBounds.size.x / 2.0f, graphPorts[i]->position.y + 30.0f));
+                        float nodeRadiusForLabel = 6.0f; // keep consistent with node radius
+                        portName.setPosition(sf::Vector2f(graphPorts[i]->position.x - textBounds.size.x / 2.0f, graphPorts[i]->position.y + nodeRadiusForLabel + 6.0f));
                         window.draw(portName);
+                    } 
+                } 
 
-                        // Future: Draw dock queue indicators (dashed lines) when ships are waiting
-                        // Future: Draw special icons for preferred ports
-                    }
-
-                    // Draw info panel when hovering over a port (left side for future control space)
-                    if (hoveredPort != -1) {
-                        sf::RectangleShape infoBox(sf::Vector2f(350.0f, 220.0f));
-                        infoBox.setPosition(sf::Vector2f(30.0f, static_cast<float>(windowHeight - 250)));
-                        infoBox.setFillColor(sf::Color(20, 25, 40, 240));
-                        infoBox.setOutlineThickness(2.0f);
-                        infoBox.setOutlineColor(sf::Color(80, 150, 255));
-                        window.draw(infoBox);
-
-                        sf::Text infoTitle(font, graphPorts[hoveredPort]->portName, 20);
-                        infoTitle.setFillColor(sf::Color(120, 200, 255));
-                        infoTitle.setStyle(sf::Text::Bold);
-                        infoTitle.setPosition(sf::Vector2f(40.0f, static_cast<float>(windowHeight - 240)));
-                        window.draw(infoTitle);
-
-                        sf::Text chargeText(font, "Daily Charge: $" + to_string(graphPorts[hoveredPort]->dailyPortCharge), 14);
-                        chargeText.setFillColor(sf::Color(200, 210, 230));
-                        chargeText.setPosition(sf::Vector2f(40.0f, static_cast<float>(windowHeight - 210)));
-                        window.draw(chargeText);
-
-                        sf::Text routeHeader(font, "Outgoing Routes:", 16);
-                        routeHeader.setFillColor(sf::Color(180, 200, 255));
-                        routeHeader.setStyle(sf::Text::Bold);
-                        routeHeader.setPosition(sf::Vector2f(40.0f, static_cast<float>(windowHeight - 180)));
-                        window.draw(routeHeader);
-
-                        int routeCount = 0;
-                        graphEdgeRoute* route = graphPorts[hoveredPort]->routeHead;
-                        while (route != nullptr && routeCount < 4) {
-                            sf::Text routeText(font, "-> " + route->destinationName + " ($" + to_string(route->voyageCost) + ")", 12);
-                            routeText.setFillColor(sf::Color(180, 190, 210));
-                            routeText.setPosition(sf::Vector2f(50.0f, static_cast<float>(windowHeight - 155 + routeCount * 22)));
-                            window.draw(routeText);
-                            routeCount++;
-                            route = route->next;
-                        }
-                    }
-                }
                 // Future: Right-side control panel for algorithm controls
                 // Future: Top-right panel for pathfinding options and filters
                 // Future: Animation progress bar at bottom
@@ -1535,10 +1828,10 @@ struct oceanRouteGraph {
             }
         }
     }
-
 };
 
-int main() {
+int main() 
+{
     oceanRouteGraph obj;
     obj.createGraphFromFile("./Routes.txt", "./PortCharges.txt");
     obj.printGraphAfterCreation();
