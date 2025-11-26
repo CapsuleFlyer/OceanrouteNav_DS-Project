@@ -1,3 +1,5 @@
+#include <map>
+
 #include <cmath>
 #include <iostream>
 #include <fstream>
@@ -219,6 +221,20 @@ struct PQNode { // priority queue node for dijikstra n a*
     }
 };
 
+// Hardcoded port screen positions for overlaying on the map PNG
+static std::map<std::string, sf::Vector2f> hardcodedPortPositions = {
+    {"New York", sf::Vector2f(220, 320)},
+    {"London", sf::Vector2f(520, 210)},
+    {"Rotterdam", sf::Vector2f(550, 220)},
+    {"Singapore", sf::Vector2f(1420, 520)},
+    {"Shanghai", sf::Vector2f(1550, 350)},
+    {"Los Angeles", sf::Vector2f(90, 370)},
+    {"Sydney", sf::Vector2f(1700, 800)},
+    {"Cape Town", sf::Vector2f(950, 800)},
+    {"Dubai", sf::Vector2f(1100, 400)},
+    {"Hong Kong", sf::Vector2f(1500, 400)},
+    // Add more ports as needed, adjust x/y to fit your map image
+};
 struct oceanRouteGraph {
     // TODO: duration is to be calculated for each route as well
     graphVerticePort** graphPorts;
@@ -241,7 +257,7 @@ struct oceanRouteGraph {
     int selectedOrigin = -1;
     int selectedDestination = -1;
     string selectedCompany = "";
-    bool useMercatorProjection = true;
+    // Mercator projection removed; only using PortCoords.txt
 
 
     oceanRouteGraph() {
@@ -254,7 +270,7 @@ struct oceanRouteGraph {
         highlightedPath = nullptr;
         highlightedPathSize = 0;
         // by default, no coordinates loaded
-        useMercatorProjection = true;
+        // Mercator projection removed
     }
 
     ~oceanRouteGraph() {
@@ -328,7 +344,7 @@ struct oceanRouteGraph {
 
                 // incrementing current field
                 currentField++;
-                currentStartingLetter = currentCharPointer + 1; // pointer aritematic -- at the next letter after the space now
+                currentStartingLetter = currentCharPointer + 1; // pointer aritematic -- in the next letter after the space now
 
             }
 
@@ -946,58 +962,21 @@ struct oceanRouteGraph {
 
     void assignPositions(float width, float height) {
         if (currentSize == 0) return;
-
-        // If coordinates exist, map lat/lon to screen position using Mercator projection
-        bool anyCoords = false;
-        for (int i = 0; i < currentSize; i++) {
-            if (graphPorts[i] != nullptr && graphPorts[i]->hasCoordinates) {
-                anyCoords = true;
-                break;
-            }
-        }
-
-        if (anyCoords) {
-            // Improved Mercator projection for accurate world map alignment
-            float mapWidth = width;
-            float mapHeight = height;
-            for (int i = 0; i < currentSize; i++) {
-                if (graphPorts[i] == nullptr) continue;
-                if (graphPorts[i]->hasCoordinates) {
-                    float lon = graphPorts[i]->longitude;
-                    float lat = graphPorts[i]->latitude;
-                    // Clamp latitude to avoid infinity at poles
-                    if (lat > 89.5f) lat = 89.5f;
-                    if (lat < -89.5f) lat = -89.5f;
-                    float x = (lon + 180.0f) / 360.0f * mapWidth;
-                    float latRad = lat * 3.14159265358979323846f / 180.0f;
-                    float mercN = std::log(std::tan((3.14159265358979323846f / 4.0f) + (latRad / 2.0f)));
-                    float y = (mapHeight / 2.0f) - (mapWidth * mercN / (2.0f * 3.14159265358979323846f));
-                    graphPorts[i]->position = sf::Vector2f(x, y);
-                } else {
-                    // fallback to radial layout for ports without coordinates
-                    float centerX = width / 2.0f;
-                    float centerY = height / 2.0f;
-                    float radiusX = width * 0.40f;
-                    float radiusY = height * 0.45f;
-                    float angle = (2.0f * 3.14159f * static_cast<float>(i)) / static_cast<float>(currentSize);
-                    graphPorts[i]->position.x = centerX + radiusX * std::cos(angle);
-                    graphPorts[i]->position.y = centerY + radiusY * std::sin(angle);
-                }
-            }
-            return;
-        }
-
-        // Default radial layout
-        float centerX = width / 2.0f;
-        float centerY = height / 2.0f;
-        float radiusX = width * 0.40f;
-        float radiusY = height * 0.45f;
-
+        float mapWidth = width;
+        float mapHeight = height;
         for (int i = 0; i < currentSize; i++) {
             if (graphPorts[i] == nullptr) continue;
-            float angle = (2.0f * 3.14159f * static_cast<float>(i)) / static_cast<float>(currentSize);
-            graphPorts[i]->position.x = centerX + radiusX * std::cos(angle);
-            graphPorts[i]->position.y = centerY + radiusY * std::sin(angle);
+            if (graphPorts[i]->hasCoordinates) {
+                float lon = graphPorts[i]->longitude;
+                float lat = graphPorts[i]->latitude;
+                // Simple equirectangular projection (linear mapping)
+                float x = (lon + 180.0f) / 360.0f * mapWidth;
+                float y = (90.0f - lat) / 180.0f * mapHeight;
+                graphPorts[i]->position = sf::Vector2f(x, y);
+            } else {
+                // If no coordinates, do not place the port
+                graphPorts[i]->position = sf::Vector2f(-1000.f, -1000.f); // Off-screen
+            }
         }
     }
 
@@ -1025,21 +1004,20 @@ struct oceanRouteGraph {
                 string token;
                 ss.clear(); ss.str(line);
                 while (ss >> token) tokens.push_back(token);
-                if (tokens.size() >= 3) {
-                    lon = stod(tokens.back()); tokens.pop_back();
-                    lat = stod(tokens.back()); tokens.pop_back();
-                    portName = tokens[0];
-                    for (size_t idx = 1; idx < tokens.size(); ++idx) {
-                        portName += " ";
-                        portName += tokens[idx];
-                    }
-                } else {
-                    continue;
+                if (tokens.size() < 3) continue;
+                try {
+                    lat = stod(tokens[tokens.size() - 2]);
+                    lon = stod(tokens[tokens.size() - 1]);
+                } catch (...) { continue; }
+                portName = "";
+                for (size_t i = 0; i < tokens.size() - 2; ++i) {
+                    if (i > 0) portName += " ";
+                    portName += tokens[i];
                 }
             }
-            // find the port and set coordinates
-            for (int i = 0; i < currentSize; ++i) {
-                if (graphPorts[i] != nullptr && graphPorts[i]->portName == portName) {
+            // Assign coordinates to the port if found
+            for (int i = 0; i < currentSize; i++) {
+                if (graphPorts[i] && graphPorts[i]->portName == portName) {
                     graphPorts[i]->latitude = static_cast<float>(lat);
                     graphPorts[i]->longitude = static_cast<float>(lon);
                     graphPorts[i]->hasCoordinates = true;
@@ -1049,58 +1027,6 @@ struct oceanRouteGraph {
         }
         file.close();
         return true;
-    }
-
-
-    sf::Color getCostColor(int cost) const {
-         if (cost < 15000) return sf::Color(100, 255, 150, 200);      // Green - Low cost
-         else if (cost < 25000) return sf::Color(255, 230, 100, 200); // Yellow - Medium cost
-         else if (cost < 35000) return sf::Color(255, 180, 100, 200); // Orange - High cost
-         else return sf::Color(255, 100, 100, 200);                   // Red - Very high cost
-    }
-
-    void drawCurvedArrow(sf::RenderWindow& window, sf::Vector2f start, sf::Vector2f end, sf::Color color, int cost) {
-        sf::Vector2f mid = (start + end) / 2.0f;
-        sf::Vector2f perpendicular(-(end.y - start.y), end.x - start.x);
-        float length = std::sqrt(perpendicular.x * perpendicular.x + perpendicular.y * perpendicular.y);
-        if (length > 0) {
-            perpendicular /= length;
-        }
-        sf::Vector2f control = mid + perpendicular * 50.0f;
-
-        int segments = 30;
-        sf::VertexArray curve(sf::PrimitiveType::LineStrip, segments + 1);
-
-        float thickness = 2.0f + (static_cast<float>(cost) / 500.0f);
-        thickness = my_min(thickness, 6.0f);
-
-        for (int i = 0; i <= segments; i++) {
-            float t = static_cast<float>(i) / static_cast<float>(segments);
-            float t2 = t * t;
-            float mt = 1.0f - t;
-            float mt2 = mt * mt;
-
-            sf::Vector2f point = mt2 * start + 2.0f * mt * t * control + t2 * end;
-            curve[i].position = point;
-            curve[i].color = color;
-        }
-        window.draw(curve);
-
-        sf::Vector2f secondLast = curve[segments - 5].position;
-        sf::Vector2f last = curve[segments].position;
-        sf::Vector2f dir = last - secondLast;
-        float dirLength = std::sqrt(dir.x * dir.x + dir.y * dir.y);
-        if (dirLength > 0) {
-            dir /= dirLength;
-        }
-
-        sf::Vector2f perpDir(-dir.y, dir.x);
-        sf::ConvexShape arrow(3);
-        arrow.setPoint(0, last);
-        arrow.setPoint(1, last - dir * 15.0f + perpDir * 8.0f);
-        arrow.setPoint(2, last - dir * 15.0f - perpDir * 8.0f);
-        arrow.setFillColor(color);
-        window.draw(arrow);
     }
 
     void handlePanelAction(const string& action, bool& showQueryPanel)
@@ -1299,18 +1225,7 @@ struct oceanRouteGraph {
                         }
                     }
                 }
-                if (event->is<sf::Event::KeyPressed>()) {
-                    const auto* keyEvent = event->getIf<sf::Event::KeyPressed>();
-                    // Fix for SFML key code: use static_cast<int>('M') if sf::Keyboard::M is not defined
-                    #ifdef SFML_KEYBOARD_M
-                    if (keyEvent && keyEvent->code == sf::Keyboard::M) {
-                    #else
-                    if (keyEvent && keyEvent->code == static_cast<sf::Keyboard::Key>('M')) {
-                    #endif
-                        useMercatorProjection = !useMercatorProjection;
-                        assignPositions(static_cast<float>(windowWidth), static_cast<float>(windowHeight));
-                    }
-                }
+                // Mercator projection toggle removed
          
 
                 sf::Vector2i mousePos = sf::Mouse::getPosition(window);
@@ -1366,12 +1281,7 @@ struct oceanRouteGraph {
                 legend.setPosition(sf::Vector2f(30.0f, 50.0f));
                 window.draw(legend);
 
-                // Projection indicator
-                string projTextStr = useMercatorProjection ? "Projection: Mercator (press M to toggle)" : "Projection: Equirectangular (press M to toggle)";
-                sf::Text projText(font, projTextStr, 12);
-                projText.setFillColor(sf::Color(200, 210, 230));
-                projText.setPosition(sf::Vector2f(30.0f, 68.0f));
-                window.draw(projText);
+                // Projection indicator removed
 
                 // ================== TOGGLE QUERY PANEL BUTTON ==================
                 sf::RectangleShape toggleButton(sf::Vector2f(180.f, 40.f));
@@ -1685,50 +1595,48 @@ struct oceanRouteGraph {
                 } // End of if (showQueryPanel)
 
                 if (!showQueryPanel) {
-                    // Draw all edges (routes) with support for highlighting
-                    // Draw all edges (routes) with support for highlighting
+                    // Draw all edges (routes) as dark red lines with arrowheads
                     for (int i = 0; i < currentSize; i++) {
                         if (graphPorts[i] == nullptr) continue;
-
                         graphEdgeRoute* route = graphPorts[i]->routeHead;
+                        sf::Vector2f p1 = graphPorts[i]->position;
                         while (route != nullptr) {
-                            int destIndex = -1;
-                            for (int j = 0; j < currentSize; j++) {
-                                if (graphPorts[j] != nullptr && graphPorts[j]->portName == route->destinationName) {
-                                    destIndex = j;
-                                    break;
+                            int destIndex = getPortIndex(route->destinationName);
+                            if (destIndex != -1 && graphPorts[destIndex] != nullptr) {
+                                sf::Vector2f p2 = graphPorts[destIndex]->position;
+                                // Only draw if both ports have valid positions
+                                if (p1.x > 0 && p1.y > 0 && p2.x > 0 && p2.y > 0) {
+                                    // Draw main line
+                                    sf::VertexArray lineArray(static_cast<sf::PrimitiveType>(1), 2); // 1 = sf::Lines
+                                    lineArray[0].position = p1;
+                                    lineArray[0].color = sf::Color(120, 30, 30, 180);
+                                    lineArray[1].position = p2;
+                                    lineArray[1].color = sf::Color(120, 30, 30, 180);
+                                    window.draw(lineArray);
+                                    // Draw arrowhead for direction
+                                    sf::Vector2f dir = p2 - p1;
+                                    float len = std::sqrt(dir.x * dir.x + dir.y * dir.y);
+                                    if (len > 0) dir /= len;
+                                    sf::Vector2f unit = dir * 18.f; // arrow size
+                                    sf::Vector2f normal(-dir.y, dir.x);
+                                    sf::Vector2f arrowTip = p2;
+                                    sf::Vector2f left = arrowTip - unit + normal * 6.0f;
+                                    sf::Vector2f right = arrowTip - unit - normal * 6.0f;
+                                    sf::VertexArray arrowArray(static_cast<sf::PrimitiveType>(1), 4); // 1 = sf::Lines
+                                    arrowArray[0].position = arrowTip;
+                                    arrowArray[0].color = sf::Color(120, 30, 30, 180);
+                                    arrowArray[1].position = left;
+                                    arrowArray[1].color = sf::Color(120, 30, 30, 180);
+                                    arrowArray[2].position = arrowTip;
+                                    arrowArray[2].color = sf::Color(120, 30, 30, 180);
+                                    arrowArray[3].position = right;
+                                    arrowArray[3].color = sf::Color(120, 30, 30, 180);
+                                    window.draw(arrowArray);
                                 }
-                            }
-
-                            if (destIndex != -1) {
-                                // Highlight if this edge is part of the highlighted path
-                                bool isHighlighted = false;
-                                for (size_t k = 1; k < highlightedPath.size(); ++k) {
-                                    if ((highlightedPath[k-1] == i && highlightedPath[k] == destIndex)) {
-                                        isHighlighted = true;
-                                        break;
-                                    }
-                                }
-                                sf::Color edgeColor;
-                                if (isHighlighted) {
-                                    if (useAStar) {
-                                        edgeColor = sf::Color(255, 0, 200, 220); // Magenta for A*
-                                    } else {
-                                        edgeColor = sf::Color(120, 60, 200, 220); // Dark purple for Dijkstra
-                                    }
-                                } else {
-                                    edgeColor = sf::Color(120, 30, 30, 90);
-                                }
-                                if (hoveredPort == i) {
-                                    edgeColor = getCostColor(route->voyageCost);
-                                    edgeColor.a = 255;
-                                }
-                                drawCurvedArrow(window, graphPorts[i]->position, graphPorts[destIndex]->position, edgeColor, route->voyageCost);
                             }
                             route = route->next;
                         }
                     }
-
                     // Draw all ports (nodes) with support for exploration states and selection highlighting
                     for (int i = 0; i < currentSize; i++) {
                         if (graphPorts[i] == nullptr) continue;
@@ -1736,68 +1644,52 @@ struct oceanRouteGraph {
                         bool isOrigin = (selectedOrigin == i);
                         bool isDestination = (selectedDestination == i);
                         bool isHovered = (hoveredPort == i);
-                        bool isExplored = false;
-                        
-
-                        // Highlight node if in highlightedPath
                         bool isHighlightedNode = false;
                         for (int idx : highlightedPath) {
                             if (idx == i) { isHighlightedNode = true; break; }
                         }
 
-
                         // Outer glow with enhanced brightness for special states
                         float glowRadius = 20.0f;
                         sf::Color glowColor(80, 150, 255, 40);
-
                         if (isOrigin) {
                             glowRadius = 50.0f;
                             glowColor = sf::Color(100, 255, 150, 120);
-                        }
-                        else if (isDestination) {
+                        } else if (isDestination) {
                             glowRadius = 50.0f;
                             glowColor = sf::Color(255, 180, 100, 120);
-                        }
-                        else if (isHovered) {
-                            glowRadius = 40.0f;
-                            glowColor = sf::Color(80, 150, 255, 80);
-                        }
-                        else if (isHighlightedNode) {
+                        } else if (isHovered) {
                             glowRadius = 35.0f;
+                            glowColor = sf::Color(150, 100, 255, 100);
+                        } else if (isHighlightedNode) {
+                            glowRadius = 30.0f;
                             glowColor = sf::Color(80, 255, 100, 80);
                         }
-
                         sf::CircleShape glow(glowRadius * 0.5f);
                         glow.setPosition(sf::Vector2f(graphPorts[i]->position.x - glowRadius * 0.5f, graphPorts[i]->position.y - glowRadius * 0.5f));
                         glow.setFillColor(glowColor);
                         window.draw(glow);
 
-
                         // Main node with state-based coloring (half size)
                         sf::CircleShape node(6.0f);
                         node.setPosition(sf::Vector2f(graphPorts[i]->position.x - 12.5f, graphPorts[i]->position.y - 12.5f));
-
                         if (isOrigin) {
                             node.setFillColor(sf::Color(100, 255, 150));
                             node.setOutlineThickness(3.0f);
                             node.setOutlineColor(sf::Color(150, 255, 180));
-                        }
-                        else if (isDestination) {
+                        } else if (isDestination) {
                             node.setFillColor(sf::Color(255, 180, 100));
                             node.setOutlineThickness(3.0f);
                             node.setOutlineColor(sf::Color(255, 220, 150));
-                        }
-                        else if (isHovered) {
+                        } else if (isHovered) {
                             node.setFillColor(sf::Color(150, 100, 255));
                             node.setOutlineThickness(3.0f);
                             node.setOutlineColor(sf::Color(200, 150, 255));
-                        }
-                        else if (isHighlightedNode) {
+                        } else if (isHighlightedNode) {
                             node.setFillColor(sf::Color(80, 255, 100));
                             node.setOutlineThickness(3.0f);
                             node.setOutlineColor(sf::Color(120, 255, 150));
-                        }
-                        else {
+                        } else {
                             node.setFillColor(sf::Color(60, 120, 200));
                             node.setOutlineThickness(2.0f);
                             node.setOutlineColor(sf::Color(100, 160, 240));
@@ -1810,14 +1702,16 @@ struct oceanRouteGraph {
                         if (isDestination) portLabel += " [D]";
 
                         sf::Text portName(font, portLabel, 14);
+                       
                         portName.setFillColor(sf::Color(220, 230, 255));
                         portName.setStyle(sf::Text::Bold);
+
                         sf::FloatRect textBounds = portName.getLocalBounds();
                         float nodeRadiusForLabel = 6.0f; // keep consistent with node radius
                         portName.setPosition(sf::Vector2f(graphPorts[i]->position.x - textBounds.size.x / 2.0f, graphPorts[i]->position.y + nodeRadiusForLabel + 6.0f));
                         window.draw(portName);
-                    } 
-                } 
+                    }
+                }
 
                 // Future: Right-side control panel for algorithm controls
                 // Future: Top-right panel for pathfinding options and filters
