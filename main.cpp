@@ -1050,7 +1050,7 @@ struct oceanRouteGraph {
     }
 
 
-    void visualizeGraph(int windowWidth = 1400, int windowHeight = 900) {
+    void visualizeGraph(int windowWidth = 1800, int windowHeight = 900) {
         // Try to load optional coordinates and world map before assigning positions
         // If a PortCoords.txt file exists in the workspace, load it
         loadPortCoordinates("./PortCoords.txt");
@@ -1171,16 +1171,17 @@ struct oceanRouteGraph {
                     // If panel closed: allow ports to be selected
                     if (!showQueryPanel)
                     {
-                        if (hoveredPort != -1)
-                        {
-                            if (selectedOrigin == -1)
+                        if (hoveredPort != -1) {
+                            if (selectedOrigin == -1) {
                                 selectedOrigin = hoveredPort;
-                            else if (selectedDestination == -1)
+                                highlightedPath.clear();
+                            } else if (selectedDestination == -1) {
                                 selectedDestination = hoveredPort;
-                            else
-                            {
+                                highlightedPath.clear();
+                            } else {
                                 selectedOrigin = hoveredPort;
                                 selectedDestination = -1;
+                                highlightedPath.clear();
                             }
                         }
                     }
@@ -1433,7 +1434,7 @@ struct oceanRouteGraph {
                     };
 
                     Button buttons[] = {
-
+                        {"Hi", sf::Color(100,200,120)},
                         {"Find Cheapest Route", sf::Color(100, 200, 120)},
                         {"Find Fastest Route", sf::Color(255, 180, 80)},
                         {"Filter by Company", sf::Color(180, 100, 220)},
@@ -1577,6 +1578,7 @@ struct oceanRouteGraph {
 
                 if (!showQueryPanel) {
                     // Draw all edges (routes) as dark red lines with arrowheads
+                    // Draw all edges (routes) with proper highlighting
                     for (int i = 0; i < currentSize; i++) {
                         if (graphPorts[i] == nullptr) continue;
                         graphEdgeRoute* route = graphPorts[i]->routeHead;
@@ -1585,58 +1587,55 @@ struct oceanRouteGraph {
                             int destIndex = getPortIndex(route->destinationName);
                             if (destIndex != -1 && graphPorts[destIndex] != nullptr) {
                                 sf::Vector2f p2 = graphPorts[destIndex]->position;
-                                // Only draw if both ports have valid positions
+
                                 if (p1.x > 0 && p1.y > 0 && p2.x > 0 && p2.y > 0) {
-                                    // Draw main line
-                                    sf::Color edgeColor = sf::Color(120, 30, 30, 180);
+                                    sf::Vector2f delta = p2 - p1;
+                                    float length = std::sqrt(delta.x * delta.x + delta.y * delta.y);
+                                    float angle = std::atan2(delta.y, delta.x) * 180.f / 3.14159265f;
+
+                                    sf::Color edgeColor(120, 30, 30, 180); // default dark red
 
                                     // Highlight if hovered port is either endpoint
                                     if (hoveredPort == i || hoveredPort == destIndex) {
-                                        edgeColor = sf::Color(160, 32, 240, 255); // bright red highlight
+                                        edgeColor = sf::Color(160, 32, 240, 255); // bright purple
                                     }
 
-                                    sf::VertexArray lineArray(sf::Lines, 2);
-                                    lineArray[0].position = p1;
-                                    lineArray[0].color = edgeColor;
-                                    lineArray[1].position = p2;
-                                    lineArray[1].color = edgeColor; 
-
-                                    // Draw arrowhead for direction
-                                    sf::Vector2f dir = p2 - p1;
-                                    float len = std::sqrt(dir.x * dir.x + dir.y * dir.y);
-                                    if (len > 0) dir /= len;
-                                    sf::Vector2f unit = dir * 18.f; // arrow size
-                                    sf::Vector2f normal(-dir.y, dir.x);
-                                    sf::Vector2f arrowTip = p2;
-                                    sf::Vector2f left = arrowTip - unit + normal * 6.0f;
-                                    sf::Vector2f right = arrowTip - unit - normal * 6.0f;
-                                    sf::VertexArray arrowArray(sf::Lines, 4);
-                                    arrowArray[0].position = arrowTip;
-                                    arrowArray[0].color = edgeColor;
-                                    arrowArray[1].position = left;
-                                    arrowArray[1].color = edgeColor;
-                                    arrowArray[2].position = arrowTip;
-                                    arrowArray[2].color = edgeColor;
-                                    arrowArray[3].position = right;
-                                    arrowArray[3].color = edgeColor;
-                                    window.draw(arrowArray);
-
-                                    sf::Vector2f p1 = graphPorts[i]->position;
-                                    sf::Vector2f p2 = graphPorts[destIndex]->position;
-                                    sf::Vector2f mouseToP1 = mousePosF - p1;
-                                    sf::Vector2f edgeDir = p2 - p1;
-                                    float edgeLen2 = edgeDir.x*edgeDir.x + edgeDir.y*edgeDir.y;
-
-                                    if (edgeLen2 > 0) {
-                                        float t = (mouseToP1.x*edgeDir.x + mouseToP1.y*edgeDir.y) / edgeLen2;
-                                        t = std::clamp(t, 0.0f, 1.0f);  // projection along segment
-                                        sf::Vector2f closest = p1 + edgeDir * t;
-                                        float dist2 = (mousePosF - closest).x*(mousePosF - closest).x + (mousePosF - closest).y*(mousePosF - closest).y;
-                                        if (dist2 < 100.0f) { // threshold = 10 pixels
-                                            edgeColor = sf::Color(255, 80, 80, 255);
+                                    // Highlight if part of the computed path
+                                    for (size_t h = 0; h + 1 < highlightedPath.size(); h++) {
+                                        if ((highlightedPath[h] == i && highlightedPath[h + 1] == destIndex) ||
+                                            (highlightedPath[h] == destIndex && highlightedPath[h + 1] == i)) {
+                                            edgeColor = sf::Color(100, 255, 150, 255); // bright green
                                         }
                                     }
 
+                                    float thickness = .5f; // default thin for non-highlighted
+                                    if (hoveredPort == i || hoveredPort == destIndex) thickness = 3.0f; // hovered edges thicker
+                                    for (size_t h = 0; h + 1 < highlightedPath.size(); h++) {
+                                        if ((highlightedPath[h] == i && highlightedPath[h + 1] == destIndex) ||
+                                            (highlightedPath[h] == destIndex && highlightedPath[h + 1] == i)) {
+                                            thickness = 4.0f; // highlighted path edges thickest
+                                        }
+                                    }
+
+                                    sf::RectangleShape line(sf::Vector2f(length, thickness));
+                                    line.setPosition(p1);
+                                    line.setRotation(sf::degrees(angle));
+                                    line.setFillColor(edgeColor);
+                                    window.draw(line);
+
+                                    // Draw simple arrowhead
+                                    sf::Vector2f dir = delta / length;
+                                    sf::Vector2f normal(-dir.y, dir.x);
+                                    sf::Vector2f arrowTip = p2;
+                                    sf::Vector2f left = arrowTip - dir * 18.f + normal * 6.f;
+                                    sf::Vector2f right = arrowTip - dir * 18.f - normal * 6.f;
+
+                                    sf::VertexArray arrow(sf::PrimitiveType::Lines, 4);
+                                    arrow[0].position = arrowTip; arrow[0].color = edgeColor;
+                                    arrow[1].position = left; arrow[1].color = edgeColor;
+                                    arrow[2].position = arrowTip; arrow[2].color = edgeColor;
+                                    arrow[3].position = right; arrow[3].color = edgeColor;
+                                    window.draw(arrow);
                                 }
                             }
                             route = route->next;
@@ -1700,22 +1699,103 @@ struct oceanRouteGraph {
                             node.setOutlineColor(sf::Color(100, 160, 240));
                         }
                         window.draw(node);
+                    
 
                         // Port name label with indicator for selected ports
-                        string portLabel = graphPorts[i]->portName;
-                        if (isOrigin) portLabel += " [O]";
-                        if (isDestination) portLabel += " [D]";
+                    string portLabel = graphPorts[i]->portName;
+                    if (isOrigin) portLabel += " [O]";
+                    if (isDestination) portLabel += " [D]";
 
-                        sf::Text portName(font, portLabel, 14);
-                       
-                        portName.setFillColor(sf::Color(220, 230, 255));
-                        portName.setStyle(sf::Text::Bold);
+                    sf::Text portName(font, portLabel, 14);
 
-                        sf::FloatRect textBounds = portName.getLocalBounds();
-                        float nodeRadiusForLabel = 6.0f; // keep consistent with node radius
-                        portName.setPosition(sf::Vector2f(graphPorts[i]->position.x - textBounds.size.x / 2.0f, graphPorts[i]->position.y + nodeRadiusForLabel + 6.0f));
-                        window.draw(portName);
+                    // Set colors and outline
+                    portName.setFillColor(sf::Color(220, 230, 255));
+                    portName.setOutlineColor(sf::Color::Black);
+                    portName.setOutlineThickness(2.f);
+                    portName.setStyle(sf::Text::Bold);
+
+                    // ABOVE ports
+                    const char* specialPortsAbove[] = { "Osaka", "Montreal", "AbuDhabi", "Stockholm", "London" };
+
+                    // LEFT ports
+                    const char* specialPortsLeft[]  = { "Oslo", "Doha", "Marseille", "Dublin" };
+
+                    // RIGHT ports
+                    const char* specialPortsRight[] = { "Copenhagen" };
+
+                    bool drawAbove = false;
+                    bool drawLeft  = false;
+                    bool drawRight = false;
+
+                    // Check ABOVE list
+                    for (int sp = 0; sp < 5; sp++) {
+                        if (portLabel.find(specialPortsAbove[sp]) != std::string::npos) {
+                            drawAbove = true;
+                            break;
+                        }
                     }
+
+                    // Check LEFT list  (3 items now)
+                    for (int sp = 0; sp < 4; sp++) {
+                        if (portLabel.find(specialPortsLeft[sp]) != std::string::npos) {
+                            drawLeft = true;
+                            break;
+                        }
+                    }
+
+                    // Check RIGHT list
+                    for (int sp = 0; sp < 1; sp++) {
+                        if (portLabel.find(specialPortsRight[sp]) != std::string::npos) {
+                            drawRight = true;
+                            break;
+                        }
+                    }
+
+                    // Text size
+                    sf::FloatRect textBounds = portName.getLocalBounds();
+                    float nodeRadiusForLabel = 6.0f;
+
+                    float textX, textY;
+
+                    if (drawLeft) {
+                        //---------------------------------------
+                        //        LEFT OF NODE (same Y level)
+                        //---------------------------------------
+                        textX = graphPorts[i]->position.x - textBounds.size.x - 14.f;
+                        textY = graphPorts[i]->position.y - (textBounds.size.y / 2.f) - 6.f;
+
+                    } else if (drawRight) {
+                        //---------------------------------------
+                        //        RIGHT OF NODE (same Y level)
+                        //---------------------------------------
+                        textX = graphPorts[i]->position.x + 14.f;   // mirror of left spacing
+                        textY = graphPorts[i]->position.y - (textBounds.size.y / 2.f) - 6.f;
+
+                    } else if (drawAbove) {
+                        //---------------------------------------
+                        //               ABOVE NODE
+                        //---------------------------------------
+                        textX = graphPorts[i]->position.x - (textBounds.size.x / 2.f) - 4.f;
+                        textY = graphPorts[i]->position.y
+                                - nodeRadiusForLabel
+                                - textBounds.size.y
+                                - 14.f;  // moved further up
+
+                    } else {
+                        //---------------------------------------
+                        //               BELOW NODE
+                        //---------------------------------------
+                        textX = graphPorts[i]->position.x - (textBounds.size.x / 2.f) - 2.f;
+                        textY = graphPorts[i]->position.y
+                                + nodeRadiusForLabel
+                                + 2.f;   // moved slightly upward
+                    }
+
+                    portName.setPosition(sf::Vector2f(textX, textY));
+
+                    // Draw
+                    window.draw(portName);
+
                 }
 
                 // Future: Right-side control panel for algorithm controls
@@ -1727,6 +1807,7 @@ struct oceanRouteGraph {
             }
         }
     }
+}
 };
 
 int main() 
@@ -1740,3 +1821,4 @@ int main()
 
     return 0;
 }
+
