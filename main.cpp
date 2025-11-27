@@ -1,5 +1,3 @@
-#include <map>
-
 #include <cmath>
 #include <iostream>
 #include <fstream>
@@ -221,20 +219,6 @@ struct PQNode { // priority queue node for dijikstra n a*
     }
 };
 
-// Hardcoded port screen positions for overlaying on the map PNG
-static std::map<std::string, sf::Vector2f> hardcodedPortPositions = {
-    {"New York", sf::Vector2f(220, 320)},
-    {"London", sf::Vector2f(520, 210)},
-    {"Rotterdam", sf::Vector2f(550, 220)},
-    {"Singapore", sf::Vector2f(1420, 520)},
-    {"Shanghai", sf::Vector2f(1550, 350)},
-    {"Los Angeles", sf::Vector2f(90, 370)},
-    {"Sydney", sf::Vector2f(1700, 800)},
-    {"Cape Town", sf::Vector2f(950, 800)},
-    {"Dubai", sf::Vector2f(1100, 400)},
-    {"Hong Kong", sf::Vector2f(1500, 400)},
-    // Add more ports as needed, adjust x/y to fit your map image
-};
 struct oceanRouteGraph {
     // TODO: duration is to be calculated for each route as well
     graphVerticePort** graphPorts;
@@ -1225,7 +1209,7 @@ struct oceanRouteGraph {
                         }
                     }
                 }
-                // Mercator projection toggle removed
+
          
 
                 sf::Vector2i mousePos = sf::Mouse::getPosition(window);
@@ -1280,8 +1264,6 @@ struct oceanRouteGraph {
                 legend.setFillColor(sf::Color(180, 180, 180));
                 legend.setPosition(sf::Vector2f(30.0f, 50.0f));
                 window.draw(legend);
-
-                // Projection indicator removed
 
                 // ================== TOGGLE QUERY PANEL BUTTON ==================
                 sf::RectangleShape toggleButton(sf::Vector2f(180.f, 40.f));
@@ -1451,7 +1433,7 @@ struct oceanRouteGraph {
                     };
 
                     Button buttons[] = {
-                        {"Find Direct Routes", sf::Color(60, 150, 220)},
+
                         {"Find Cheapest Route", sf::Color(100, 200, 120)},
                         {"Find Fastest Route", sf::Color(255, 180, 80)},
                         {"Filter by Company", sf::Color(180, 100, 220)},
@@ -1539,7 +1521,6 @@ struct oceanRouteGraph {
                     yOffset += 10.0f;
 
                     // --- AUTO PATHFINDING & HIGHLIGHTING ---
-                    // (No longer clear highlightedPath here; keep it until origin/dest changes or new search)
                     if (selectedOrigin != -1 && selectedDestination != -1 && highlightedPath.empty()) {
                         if (useAStar) {
                             findFastestRoute(selectedOrigin, selectedDestination, selectedCompany);
@@ -1607,12 +1588,19 @@ struct oceanRouteGraph {
                                 // Only draw if both ports have valid positions
                                 if (p1.x > 0 && p1.y > 0 && p2.x > 0 && p2.y > 0) {
                                     // Draw main line
-                                    sf::VertexArray lineArray(static_cast<sf::PrimitiveType>(1), 2); // 1 = sf::Lines
+                                    sf::Color edgeColor = sf::Color(120, 30, 30, 180);
+
+                                    // Highlight if hovered port is either endpoint
+                                    if (hoveredPort == i || hoveredPort == destIndex) {
+                                        edgeColor = sf::Color(160, 32, 240, 255); // bright red highlight
+                                    }
+
+                                    sf::VertexArray lineArray(sf::Lines, 2);
                                     lineArray[0].position = p1;
-                                    lineArray[0].color = sf::Color(120, 30, 30, 180);
+                                    lineArray[0].color = edgeColor;
                                     lineArray[1].position = p2;
-                                    lineArray[1].color = sf::Color(120, 30, 30, 180);
-                                    window.draw(lineArray);
+                                    lineArray[1].color = edgeColor; 
+
                                     // Draw arrowhead for direction
                                     sf::Vector2f dir = p2 - p1;
                                     float len = std::sqrt(dir.x * dir.x + dir.y * dir.y);
@@ -1622,16 +1610,33 @@ struct oceanRouteGraph {
                                     sf::Vector2f arrowTip = p2;
                                     sf::Vector2f left = arrowTip - unit + normal * 6.0f;
                                     sf::Vector2f right = arrowTip - unit - normal * 6.0f;
-                                    sf::VertexArray arrowArray(static_cast<sf::PrimitiveType>(1), 4); // 1 = sf::Lines
+                                    sf::VertexArray arrowArray(sf::Lines, 4);
                                     arrowArray[0].position = arrowTip;
-                                    arrowArray[0].color = sf::Color(120, 30, 30, 180);
+                                    arrowArray[0].color = edgeColor;
                                     arrowArray[1].position = left;
-                                    arrowArray[1].color = sf::Color(120, 30, 30, 180);
+                                    arrowArray[1].color = edgeColor;
                                     arrowArray[2].position = arrowTip;
-                                    arrowArray[2].color = sf::Color(120, 30, 30, 180);
+                                    arrowArray[2].color = edgeColor;
                                     arrowArray[3].position = right;
-                                    arrowArray[3].color = sf::Color(120, 30, 30, 180);
+                                    arrowArray[3].color = edgeColor;
                                     window.draw(arrowArray);
+
+                                    sf::Vector2f p1 = graphPorts[i]->position;
+                                    sf::Vector2f p2 = graphPorts[destIndex]->position;
+                                    sf::Vector2f mouseToP1 = mousePosF - p1;
+                                    sf::Vector2f edgeDir = p2 - p1;
+                                    float edgeLen2 = edgeDir.x*edgeDir.x + edgeDir.y*edgeDir.y;
+
+                                    if (edgeLen2 > 0) {
+                                        float t = (mouseToP1.x*edgeDir.x + mouseToP1.y*edgeDir.y) / edgeLen2;
+                                        t = std::clamp(t, 0.0f, 1.0f);  // projection along segment
+                                        sf::Vector2f closest = p1 + edgeDir * t;
+                                        float dist2 = (mousePosF - closest).x*(mousePosF - closest).x + (mousePosF - closest).y*(mousePosF - closest).y;
+                                        if (dist2 < 100.0f) { // threshold = 10 pixels
+                                            edgeColor = sf::Color(255, 80, 80, 255);
+                                        }
+                                    }
+
                                 }
                             }
                             route = route->next;
