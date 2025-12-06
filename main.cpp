@@ -1,4 +1,4 @@
-#include <cmath>
+﻿#include <cmath>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -6,12 +6,26 @@
 #include <SFML/Graphics.hpp>
 #include <SFML/Window/Event.hpp>
 
+//extern bool showOnlyActiveRoutes;
+//extern string activeCompanyFilter;
+
 // ==== BEGIN: Custom STL Replacements ====
 template<typename T, int N = 256> struct SimpleVector {
     T data[N];
     int sz;
     SimpleVector() : sz(0) {}
     void push_back(const T& v) { if (sz < N) data[sz++] = v; }
+    bool empty() {
+        if (sz == 0) {
+            return true;
+        }
+
+        if (N == 0) {
+            return true;
+        }
+
+        return false;
+    }
     void clear() { sz = 0; }
     int size() const { return sz; }
     T& operator[](int i) { return data[i]; }
@@ -24,8 +38,8 @@ template<typename T, int N = 256> struct SimpleQueue {
     T data[N];
     int front, back;
     SimpleQueue() : front(0), back(0) {}
-    void push(const T& v) { if ((back+1)%N != front) { data[back] = v; back = (back+1)%N; } }
-    void pop() { if (!empty()) front = (front+1)%N; }
+    void push(const T& v) { if ((back + 1) % N != front) { data[back] = v; back = (back + 1) % N; } }
+    void pop() { if (!empty()) front = (front + 1) % N; }
     T& top() { return data[front]; }
     bool empty() const { return front == back; }
 };
@@ -37,18 +51,18 @@ template<typename T, int N = 256> struct SimplePriorityQueue {
     void push(const T& v) {
         int i = sz++;
         data[i] = v;
-        while (i > 0 && data[(i-1)/2] > data[i]) {
-            T tmp = data[i]; data[i] = data[(i-1)/2]; data[(i-1)/2] = tmp;
-            i = (i-1)/2;
+        while (i > 0 && data[(i - 1) / 2] > data[i]) {
+            T tmp = data[i]; data[i] = data[(i - 1) / 2]; data[(i - 1) / 2] = tmp;
+            i = (i - 1) / 2;
         }
     }
     void pop() {
         if (sz == 0) return;
         data[0] = data[--sz];
         int i = 0;
-        while (2*i+1 < sz) {
-            int j = 2*i+1;
-            if (j+1 < sz && data[j+1] < data[j]) j++;
+        while (2 * i + 1 < sz) {
+            int j = 2 * i + 1;
+            if (j + 1 < sz && data[j + 1] < data[j]) j++;
             if (data[i] < data[j]) break;
             T tmp = data[i]; data[i] = data[j]; data[j] = tmp;
             i = j;
@@ -72,10 +86,10 @@ template<typename K, typename V, int N = 256> struct SimpleMap {
         iterator(K* kk, V* vv) : k(kk), v(vv) {}
         iterator& operator++() { ++k; ++v; return *this; }
         bool operator!=(const iterator& o) const { return k != o.k; }
-        std::pair<K,V> operator*() const { return {*k, *v}; }
+        std::pair<K, V> operator*() const { return { *k, *v }; }
     };
     iterator begin() { return iterator(keys, values); }
-    iterator end() { return iterator(keys+sz, values+sz); }
+    iterator end() { return iterator(keys + sz, values + sz); }
     int size() const { return sz; }
     bool contains(const K& k) const { for (int i = 0; i < sz; ++i) if (keys[i] == k) return true; return false; }
     int find(const K& k) const { for (int i = 0; i < sz; ++i) if (keys[i] == k) return i; return -1; }
@@ -86,12 +100,14 @@ inline int my_max(int a, int b) { return a > b ? a : b; }
 inline float my_min(float a, float b) { return a < b ? a : b; }
 inline float my_max(float a, float b) { return a > b ? a : b; }
 inline char my_tolower(char c) { return (c >= 'A' && c <= 'Z') ? (c + 32) : c; }
-inline bool my_isalnum(char c) { return (c >= 'A' && c <= 'Z')||(c >= 'a' && c <= 'z')||(c >= '0' && c <= '9'); }
+inline bool my_isalnum(char c) { return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'); }
 // ==== END: Custom STL Replacements ====
 #define TOTALNUMBEROFPORTS 40
 #define MAX_COST 999999999
 
 using namespace std;
+
+
 
 struct graphEdgeRoute {
     string destinationName;
@@ -123,6 +139,32 @@ struct graphEdgeRoute {
     }
 };
 
+
+/*
+struct WaitingShip {
+    string company;
+    long long arrivalTime;      // minutes since simulation start
+    long long serviceEndTime;   // when it finishes docking
+    WaitingShip() : arrivalTime(0), serviceEndTime(0) {}
+};
+*/
+// DELETE THESE TWO STRUCTS:
+// struct WaitingShip { ... }
+// struct WaitingShipGraph { ... }
+
+// REPLACE WITH THIS ONE — ONLY ONE STRUCT
+struct WaitingShip {
+    string company;
+    long long arrivalTime = 0;
+    long long serviceStartTime = -1;
+    long long serviceEndTime = -1;
+    int dockSlot = -1;  // -1 = waiting, 0-2 = docked
+
+    WaitingShip() = default;
+    WaitingShip(string c, long long at) : company(c), arrivalTime(at), serviceStartTime(-1), serviceEndTime(-1), dockSlot(-1) {}
+};
+
+
 struct graphVerticePort {
     string portName; // can be both source and destination
     int dailyPortCharge;
@@ -132,6 +174,9 @@ struct graphVerticePort {
     float latitude; // optional
     float longitude; // optional
     bool hasCoordinates;
+    SimpleVector<WaitingShip, 32> dockingQueue;   // ← QUEUE OF WAITING SHIPS
+    int maxDocks = 3;                             // ← MAX DOCKING SLOTS
+    int currentDocked = 0;
 
     graphVerticePort() {
         this->portName = "";
@@ -153,21 +198,22 @@ struct graphVerticePort {
 
 };
 
-struct PathResult { // just stores the pathing, need to test out different kinks for now
+struct PathResult { // just stores the pathing, need to test out different things for now
     int* path;
     int pathSize;
     int totalCost;
+    long long totalTimeMinutes;
     bool found;
-    
+
     PathResult() : path(nullptr), pathSize(0), totalCost(MAX_COST), found(false) {}
-    
+
     ~PathResult() {
         if (path != nullptr) {
             delete[] path;
             path = nullptr;
         }
     }
-    
+
     PathResult(const PathResult& other) {
         pathSize = other.pathSize;
         totalCost = other.totalCost;
@@ -177,11 +223,12 @@ struct PathResult { // just stores the pathing, need to test out different kinks
             for (int i = 0; i < pathSize; i++) {
                 path[i] = other.path[i];
             }
-        } else {
+        }
+        else {
             path = nullptr;
         }
     }
-    
+
     PathResult& operator=(const PathResult& other) {
         if (this != &other) {
             if (path != nullptr) {
@@ -195,7 +242,8 @@ struct PathResult { // just stores the pathing, need to test out different kinks
                 for (int i = 0; i < pathSize; i++) {
                     path[i] = other.path[i];
                 }
-            } else {
+            }
+            else {
                 path = nullptr;
             }
         }
@@ -219,6 +267,97 @@ struct PQNode { // priority queue node for dijikstra n a*
     }
 };
 
+struct JourneyLeg {
+    int portIndex;
+    string company;
+    long long departureTime;
+    long long arrivalTime;
+    JourneyLeg* next;
+    JourneyLeg() : portIndex(-1), next(nullptr) {}
+};
+
+/*
+
+class MultiLegJourney {
+public:
+    JourneyLeg* head;
+    JourneyLeg* tail;
+    int legCount;
+    MultiLegJourney() : head(nullptr), tail(nullptr), legCount(0) {}
+    void addLeg(int portIdx, const string& comp = "") {
+        JourneyLeg* newLeg = new JourneyLeg();
+        newLeg->portIndex = portIdx;
+        newLeg->company = comp;
+        if (!head) head = tail = newLeg;
+        else { tail->next = newLeg; tail = newLeg; }
+        legCount++;
+    } }
+};
+*/
+class MultiLegJourney {
+public:
+    JourneyLeg* head;
+    JourneyLeg* tail;
+    int legCount;
+
+    MultiLegJourney() : head(nullptr), tail(nullptr), legCount(0) {}
+
+    void addLeg(int portIdx, const string& comp = "") {
+        JourneyLeg* newLeg = new JourneyLeg();
+        newLeg->portIndex = portIdx;
+        newLeg->company = comp;
+        newLeg->next = nullptr;
+
+        if (!head) {
+            head = tail = newLeg;
+        }
+        else {
+            tail->next = newLeg;
+            tail = newLeg;
+        }
+        legCount++;
+    }
+
+    void removeLeg(int portIdx) {
+        if (!head) return;
+
+        if (head->portIndex == portIdx) {
+            JourneyLeg* temp = head;
+            head = head->next;
+            delete temp;
+            if (!head) tail = nullptr;
+            legCount--;
+            return;
+        }
+
+        JourneyLeg* prev = nullptr;
+        JourneyLeg* curr = head;
+
+        while (curr != nullptr && curr->portIndex != portIdx) {
+            prev = curr;
+            curr = curr->next;
+        }
+
+        if (!curr) return;
+
+        prev->next = curr->next;
+        if (curr == tail) tail = prev;
+        delete curr;
+        legCount--;
+    }
+
+    void clear() {
+        while (head) {
+            JourneyLeg* temp = head;
+            head = head->next;
+            delete temp;
+        }
+        tail = nullptr;
+        legCount = 0;
+    }
+
+    ~MultiLegJourney() { clear(); }
+};
 struct oceanRouteGraph {
     // TODO: duration is to be calculated for each route as well
     graphVerticePort** graphPorts;
@@ -234,14 +373,121 @@ struct oceanRouteGraph {
     bool runSimulation = false;
     bool typingDate = false;
     bool typingCompany = false;
-    
+    bool useAStar = false;
+
     PathResult currentPath;
-    int* highlightedPath;
+    //int* highlightedPath;
+    //std::vector<int> highlightedPath;
+    SimpleVector<int, 1024> highlightedPath;
     int highlightedPathSize;
     int selectedOrigin = -1;
     int selectedDestination = -1;
     string selectedCompany = "";
     // Mercator projection removed; only using PortCoords.txt
+    bool showAlgorithmVisualization = false;
+    SimpleVector<int, 512> vizOpenSet;
+    SimpleVector<int, 512> vizClosedSet;
+
+    // Add these in your class
+    float whooshProgress = 0.0f;        // 0.0 to 1.0
+    bool showWhoosh = false;
+    sf::Clock whooshClock;
+
+
+    /// QUEUEING LOGIC AND VARIABLES:
+    long long globalSimulationTime = 0;  // minutes since start — increases every frame
+    /*
+    struct WaitingShipGraph {
+        string company;
+        long long arrivalTime;     // when ship arrived at port
+        long long serviceStartTime = -1;  // when it started docking
+        long long serviceEndTime = -1;    // when it finishes
+        int dockSlot = -1;         // which dock it's using (-1 = waiting)
+    };
+    */
+
+    // EACH PORT HAS ONE QUEUE PER COMPANY
+    // We use SimpleVector<WaitingShip> for each company
+    SimpleMap<string, SimpleVector<WaitingShip, 32>> companyQueues;  // [portIndex][company] = queue
+
+    // Each port has limited docks
+    SimpleVector<int, 64> availableDocks;  // availableDocks[portIndex] = number of free docks
+
+    // GLOBAL CONSOLE LOG — WORKS EVERYWHERE
+    SimpleVector<string, 50> consoleLines;
+    bool consoleFirstTime = true; // static removed
+    bool simulationMode = false;
+
+    //bool isCalculatingPath = false;
+    // int currentCalculatingNode = -1;
+    // Subgraph filtering
+    string activeCompanyFilter = "";           // e.g., "CMA CGM"
+    bool showOnlyActiveRoutes = false;         // toggle
+    SimpleVector<int, 512> visiblePorts;       // ports that pass filter
+    SimpleVector<pair<int, int>, 1024> visibleEdges;  // edges that pass filter
+
+    void addLog(const string& msg) {
+        if (consoleFirstTime) {
+            consoleLines.push_back("=== OCEAN ROUTE SYSTEM LOG ===");
+            consoleLines.push_back("Ready.");
+            consoleFirstTime = false;
+        }
+        consoleLines.push_back(msg);
+        if (consoleLines.size() > 35) {
+            for (int i = 0; i < consoleLines.size() - 35; i++) {
+                consoleLines[i] = consoleLines[i + 1];
+            }
+            consoleLines.sz = 35;
+        }
+    }
+
+    void generateSubgraph() {
+        visiblePorts.clear();
+        visibleEdges.clear();
+
+        if (!showOnlyActiveRoutes) {
+            // Show all
+            for (int i = 0; i < currentSize; i++) {
+                if (graphPorts[i]) visiblePorts.push_back(i);
+            }
+            // Add all edges later in drawing
+            return;
+        }
+
+        // COMPANY FILTER
+        for (int i = 0; i < currentSize; i++) {
+            if (!graphPorts[i]) continue;
+
+            // Check if port has at least one route with the company
+            graphEdgeRoute* route = graphPorts[i]->routeHead;
+            bool hasCompanyRoute = false;
+            while (route) {
+                if (route->shippingCompanyName == activeCompanyFilter) {
+                    hasCompanyRoute = true;
+                    break;
+                }
+                route = route->next;
+            }
+
+            if (hasCompanyRoute || activeCompanyFilter.empty()) {
+                visiblePorts.push_back(i);
+            }
+        }
+
+        // Build visible edges
+        for (int i = 0; i < currentSize; i++) {
+            if (!graphPorts[i]) continue;
+            graphEdgeRoute* route = graphPorts[i]->routeHead;
+            while (route) {
+                int dest = getPortIndex(route->destinationName);
+                if (dest != -1 &&
+                    (route->shippingCompanyName == activeCompanyFilter || activeCompanyFilter.empty())) {
+                    visibleEdges.push_back({ i, dest });
+                }
+                route = route->next;
+            }
+        }
+    }
 
 
     oceanRouteGraph() {
@@ -251,10 +497,15 @@ struct oceanRouteGraph {
         for (int i = 0; i < TOTALNUMBEROFPORTS; i++) {
             graphPorts[i] = nullptr;
         }
-        highlightedPath = nullptr;
+        // highlightedPath = nullptr;
         highlightedPathSize = 0;
         // by default, no coordinates loaded
         // Mercator projection removed
+
+        availableDocks = SimpleVector<int, 64>();
+        for (int i = 0; i < TOTALNUMBEROFPORTS; i++) {
+            availableDocks.push_back(3);  // 3 docks per port
+        }
     }
 
     ~oceanRouteGraph() {
@@ -278,12 +529,22 @@ struct oceanRouteGraph {
 
         delete[] graphPorts;
         graphPorts = nullptr;
-        
+
+        /*
         if (highlightedPath != nullptr) {
             delete[] highlightedPath;
             highlightedPath = nullptr;
         }
+        */
     }
+
+        // ←←←←← YOUR MULTI-LEG CODE GOES HERE — 100% CORRECT →→→→→
+        
+
+        MultiLegJourney currentJourney;
+        bool buildingMultiLeg = false;
+        // ←←←←← END OF MULTI-LEG CODE →→→→→
+
 
     // parse the string from get line ourselver
     bool stringParsingForRoute(const string& lineFromFile, string& sourceName, string& destinationName, string& date, string& arrivalTime, string& departureTime, int& voyageCost, string& shippingCompanyName) {
@@ -437,7 +698,7 @@ struct oceanRouteGraph {
                 if (my_isalnum(c)) out.push_back(my_tolower(c));
             }
             return out;
-        };
+            };
         string normalized = normalize(key);
         int idx = portIndexMap.find(normalized);
         if (idx != -1) {
@@ -546,7 +807,7 @@ struct oceanRouteGraph {
                     string out;
                     for (char c : s) if (my_isalnum(c)) out.push_back(my_tolower(c));
                     return out;
-                };
+                    };
                 portIndexMap[normalize(sourceName)] = currentSize;
                 addAtEndOfLinkedList(graphPorts[currentSize]->routeHead, destinationName, date, arrivalTime, departureTime, voyageCost, shippingCompanyName);
                 currentSize++;
@@ -562,7 +823,7 @@ struct oceanRouteGraph {
                         string out;
                         for (char c : s) if (my_isalnum(c)) out.push_back(my_tolower(c));
                         return out;
-                    };
+                        };
                     portIndexMap[normalize(destinationName)] = currentSize;
                     currentSize++;
                 }
@@ -650,7 +911,7 @@ struct oceanRouteGraph {
             cout << endl;
         }
     }
-    
+
     int getPortIndex(const string& portName) { // helper function 
         // use normalized map lookup first
         auto normalize = [](const string& s) {
@@ -659,7 +920,7 @@ struct oceanRouteGraph {
                 if (my_isalnum(c)) out.push_back(my_tolower(c));
             }
             return out;
-        };
+            };
         string key = normalize(portName);
         int idx = portIndexMap.find(key);
         if (idx != -1) return portIndexMap[key];
@@ -670,7 +931,7 @@ struct oceanRouteGraph {
         }
         return -1;
     }
-    
+
     int calculateHeuristic(int fromIndex, int toIndex) { //gets the euclidean distance i changed a bit from help but it should work
         if (fromIndex < 0 || fromIndex >= currentSize || toIndex < 0 || toIndex >= currentSize) {
             return 0;
@@ -678,270 +939,1073 @@ struct oceanRouteGraph {
         if (graphPorts[fromIndex] == nullptr || graphPorts[toIndex] == nullptr) {
             return 0;
         }
-        
+
         float dx = graphPorts[fromIndex]->position.x - graphPorts[toIndex]->position.x;
         float dy = graphPorts[fromIndex]->position.y - graphPorts[toIndex]->position.y;
         return static_cast<int>(sqrt(dx * dx + dy * dy) * 10);
     }
-    
+
     void reconstructPath(PathResult& result, int* parent, int start, int end) { // builds path from parent array
         if (parent[end] == -1 && end != start) {
             result.path = nullptr;
             result.pathSize = 0;
             return;
         }
-        
+
         int tempPath[TOTALNUMBEROFPORTS];
         int pathCount = 0;
         int current = end;
-        
+
         while (current != -1 && pathCount < TOTALNUMBEROFPORTS) {
             tempPath[pathCount] = current;
             pathCount++;
             current = parent[current];
         }
-        
+
         if (pathCount > 0) {
             result.pathSize = pathCount;
             result.path = new int[pathCount];
-            
+
             for (int i = 0; i < pathCount; i++) {
                 result.path[i] = tempPath[pathCount - 1 - i];
             }
-        } else {
+        }
+        else {
             result.path = nullptr;
             result.pathSize = 0;
         }
     }
-    
-    PathResult dijkstraShortestPath(int startIndex, int endIndex, const string& filterCompany = "") { // cheapest route so less efficient but checks everything
+
+
+    bool parseDateTime(const string& dateStr, const string& timeStr,
+        int& day, int& month, int& year,
+        int& hour, int& minute)
+    {
+        // Expected formats:
+        // date  = "dd/mm/yyyy"
+        // time  = "hh:mm"
+
+        if (dateStr.size() < 10 || timeStr.size() < 4)
+            return false;
+
+        // Parse date
+        day = stoi(dateStr.substr(0, 2));
+        month = stoi(dateStr.substr(3, 2));
+        year = stoi(dateStr.substr(6, 4));
+
+        // Parse time
+        hour = stoi(timeStr.substr(0, 2));
+        minute = stoi(timeStr.substr(3, 2));
+
+        return true;
+    }
+
+
+    long long parseDateTimeToMinutes(const string& dateStr, const string& timeStr) {
+        int day, month, year, hour, minute;
+        if (!parseDateTime(dateStr, timeStr, day, month, year, hour, minute))
+            return 0;
+
+        static const int daysInMonth[13] = { 0,31,28,31,30,31,30,31,31,30,31,30,31 };
+        long long total = 0;
+
+        // Years from 2024 to year-1
+        for (int y = 2024; y < year; y++) {
+            total += 365LL * 24 * 60;
+            if (y % 4 == 0) total += 24 * 60; // leap year
+        }
+
+        // Months from Jan to month-1
+        for (int m = 1; m < month; m++) {
+            total += daysInMonth[m] * 24LL * 60;
+            if (m == 2 && year % 4 == 0) total += 24 * 60;
+        }
+
+        total += (day - 1LL) * 24 * 60;
+        total += hour * 60LL;
+        total += minute;
+
+        return total;
+    }
+
+    PathResult dijkstraShortestPath(
+        int startIndex, int endIndex,
+        const string& preferredCompany = "",
+        const SimpleVector<string>& avoidPorts = {},
+        int maxVoyageHours = -1
+    ) {
         PathResult result;
-        
-        if (startIndex < 0 || startIndex >= currentSize || endIndex < 0 || endIndex >= currentSize) {
-            return result;
-        }
-        if (graphPorts[startIndex] == nullptr || graphPorts[endIndex] == nullptr) {
-            return result;
-        }
-        
+        if (startIndex < 0 || endIndex < 0 || startIndex >= currentSize || endIndex >= currentSize) return result;
+
         int* dist = new int[currentSize];
         int* parent = new int[currentSize];
         bool* visited = new bool[currentSize];
-        
+
         for (int i = 0; i < currentSize; i++) {
             dist[i] = MAX_COST;
             parent[i] = -1;
             visited[i] = false;
         }
-        
-        SimplePriorityQueue<PQNode, 256> pq;
-        
+
+        SimplePriorityQueue<PQNode, 512> pq;
         dist[startIndex] = 0;
         pq.push(PQNode(startIndex, 0));
-        
+
         while (!pq.empty()) {
-            PQNode current = pq.top();
-            pq.pop();
-            
-            int u = current.portIndex;
-            
+            PQNode curr = pq.top(); pq.pop();
+            int u = curr.portIndex;
             if (visited[u]) continue;
             visited[u] = true;
-            
+
             if (u == endIndex) {
                 reconstructPath(result, parent, startIndex, endIndex);
                 result.totalCost = dist[u];
-                result.found = (result.path != nullptr && result.pathSize > 0);
-                delete[] dist;
-                delete[] parent;
-                delete[] visited;
-                return result;
+                result.found = true;
+                break;
             }
-            
+
             graphEdgeRoute* route = graphPorts[u]->routeHead;
-            while (route != nullptr) {
-                int v = getPortIndex(route->destinationName);
-                
-                if (v != -1 && !visited[v]) {
-                    if (!filterCompany.empty() && route->shippingCompanyName != filterCompany) {
-                        route = route->next;
-                        continue;
+            bool usedPreferred = false;
+
+            // PHASE 1: Try PREFERRED COMPANY first
+            if (!preferredCompany.empty()) {
+                route = graphPorts[u]->routeHead;
+                while (route != nullptr) {
+                    int v = getPortIndex(route->destinationName);
+                    if (v == -1 || visited[v]) { route = route->next; continue; }
+                    // ←←←←← ADD THIS BLOCK HERE →→→→→
+                    if (showOnlyActiveRoutes && !activeCompanyFilter.empty()) {
+                        if (route->shippingCompanyName != activeCompanyFilter) {
+                            route = route->next;
+                            continue;
+                        }
+                    }
+                    // ←←←←← END BLOCK →→→→→
+
+                    // Avoid ports
+                    bool skip = false;
+                    for (int i = 0; i < avoidPorts.size(); i++) {
+                        if (graphPorts[v]->portName == avoidPorts[i]) { skip = true; break; }
+                    }
+                    if (skip) { route = route->next; continue; }
+
+                    
+                    // Max voyage time
+                    if (maxVoyageHours > 0) {
+                        long long dep = parseDateTimeToMinutes(route->date, route->departureTime);
+                        long long arr = parseDateTimeToMinutes(route->date, route->arrivalTime);
+                        if (arr < dep) arr += 24 * 60;
+                        if ((arr - dep) > maxVoyageHours * 60LL) { route = route->next; continue; }
                     }
                     
-                    int edgeCost = route->voyageCost;
-                    if (v != endIndex) {
-                        edgeCost += graphPorts[v]->dailyPortCharge;
+                    if (route->shippingCompanyName == preferredCompany) {
+                        int edgeCost = route->voyageCost + (v != endIndex ? graphPorts[v]->dailyPortCharge : 0);
+                        if (dist[u] + edgeCost < dist[v]) {
+                            dist[v] = dist[u] + edgeCost;
+                            parent[v] = u;
+                            pq.push(PQNode(v, dist[v]));
+                        }
+                        usedPreferred = true;
                     }
+                    route = route->next;
+                }
+            }
+
+            // PHASE 2: If no preferred route found → allow ANY company
+            if (!usedPreferred || !preferredCompany.empty()) {
+                route = graphPorts[u]->routeHead;
+                while (route != nullptr) {
+                    int v = getPortIndex(route->destinationName);
+                    if (v == -1 || visited[v]) { route = route->next; continue; }
+
+                    // ←←←←← GLOBAL COMPANY FILTER — MUST BE IN BOTH PHASES →→→→→
+                    if (showOnlyActiveRoutes && !activeCompanyFilter.empty()) {
+                        if (route->shippingCompanyName != activeCompanyFilter) {
+                            route = route->next;
+                            continue;
+                        }
+                    }
+                    // ←←←←← END FILTER →→→→→
+
+                    bool skip = false;
+                    for (int i = 0; i < avoidPorts.size(); i++) {
+                        if (graphPorts[v]->portName == avoidPorts[i]) { skip = true; break; }
+                    }
+                    if (skip) { route = route->next; continue; }
+
                     
-                    if (dist[u] != MAX_COST && dist[u] + edgeCost < dist[v]) {
+                    if (maxVoyageHours > 0) {
+                        long long dep = parseDateTimeToMinutes(route->date, route->departureTime);
+                        long long arr = parseDateTimeToMinutes(route->date, route->arrivalTime);
+                        if (arr < dep) arr += 24 * 60;
+                        if ((arr - dep) > maxVoyageHours * 60LL) { route = route->next; continue; }
+                    }
+    
+                    int edgeCost = route->voyageCost + (v != endIndex ? graphPorts[v]->dailyPortCharge : 0);
+                    if (dist[u] + edgeCost < dist[v]) {
                         dist[v] = dist[u] + edgeCost;
                         parent[v] = u;
                         pq.push(PQNode(v, dist[v]));
                     }
+                    route = route->next;
                 }
-                route = route->next;
             }
         }
-        
-        if (dist[endIndex] != MAX_COST) {
-            reconstructPath(result, parent, startIndex, endIndex);
-            result.totalCost = dist[endIndex];
-            result.found = (result.path != nullptr && result.pathSize > 0);
-        }
-        
-        delete[] dist;
-        delete[] parent;
-        delete[] visited;
-        
+
+        delete[] dist; delete[] parent; delete[] visited;
         return result;
     }
-    
-    PathResult aStarShortestPath(int startIndex, int endIndex, const string& filterCompany = "") { // optimal path that doesnt go through every node
+
+    PathResult aStarCheapestWithPrefs(
+        int startIndex, int endIndex,
+        const string& preferredCompany = "",
+        const SimpleVector<string>& avoidPorts = {},
+        int maxVoyageHours = -1
+    ) {
         PathResult result;
-        
-        if (startIndex < 0 || startIndex >= currentSize || endIndex < 0 || endIndex >= currentSize) {
-            return result;
-        }
-        if (graphPorts[startIndex] == nullptr || graphPorts[endIndex] == nullptr) {
-            return result;
-        }
-        
+        if (startIndex < 0 || endIndex < 0) return result;
+
         int* gScore = new int[currentSize];
         int* fScore = new int[currentSize];
         int* parent = new int[currentSize];
         bool* visited = new bool[currentSize];
-        
+
         for (int i = 0; i < currentSize; i++) {
             gScore[i] = MAX_COST;
             fScore[i] = MAX_COST;
             parent[i] = -1;
             visited[i] = false;
         }
-        
-        SimplePriorityQueue<PQNode, 256> pq;
-        
+
+        SimplePriorityQueue<PQNode, 512> pq;
         gScore[startIndex] = 0;
         fScore[startIndex] = calculateHeuristic(startIndex, endIndex);
         pq.push(PQNode(startIndex, gScore[startIndex], calculateHeuristic(startIndex, endIndex)));
-        
+
         while (!pq.empty()) {
-            PQNode current = pq.top();
-            pq.pop();
-            
-            int u = current.portIndex;
-            
+            PQNode curr = pq.top(); pq.pop();
+            int u = curr.portIndex;
             if (visited[u]) continue;
             visited[u] = true;
-            
+
             if (u == endIndex) {
                 reconstructPath(result, parent, startIndex, endIndex);
                 result.totalCost = gScore[u];
-                result.found = (result.path != nullptr && result.pathSize > 0);
-                delete[] gScore;
-                delete[] fScore;
-                delete[] parent;
-                delete[] visited;
-                return result;
+                result.found = true;
+                break;
             }
-            
+
             graphEdgeRoute* route = graphPorts[u]->routeHead;
-            while (route != nullptr) {
-                int v = getPortIndex(route->destinationName);
-                
-                if (v != -1 && !visited[v]) {
-                    if (!filterCompany.empty() && route->shippingCompanyName != filterCompany) {
+            bool usedPreferred = false;
+
+            if (!preferredCompany.empty()) {
+                route = graphPorts[u]->routeHead;
+                while (route != nullptr) {
+                    int v = getPortIndex(route->destinationName);
+                    if (v == -1 || visited[v]) { route = route->next; continue; }
+
+                    cout << "From function: " <<  activeCompanyFilter << endl;
+                    // ←←←←← ADD THIS BLOCK HERE →→→→→
+                    if (showOnlyActiveRoutes && !activeCompanyFilter.empty()) {
+                        if (route->shippingCompanyName != activeCompanyFilter) {
+                            route = route->next;
+                            continue;
+                        }
+                    }
+                    // ←←←←← END BLOCK →→→→→
+
+                    bool skip = false;
+                    for (int i = 0; i < avoidPorts.size(); i++) {
+                        if (graphPorts[v]->portName == avoidPorts[i]) { skip = true; break; }
+                    }
+                    if (skip) { route = route->next; continue; }
+
+                    // --- 1. Parse times once ---
+                    long long dep = parseDateTimeToMinutes(route->date, route->departureTime);
+                    long long arr = parseDateTimeToMinutes(route->date, route->arrivalTime);
+
+                    // Fix next-day arrival
+                    if (arr < dep) arr += 24LL * 60LL;
+
+                    // --- 2. Adjust departure to next day if we arrive late ---
+                    long long adjustedDep = dep;
+                    if (adjustedDep < arr) {
+                        adjustedDep += 24LL * 60LL;
+                    }
+
+                    // If we STILL miss the ship → skip
+                    if (arr > adjustedDep) {
                         route = route->next;
                         continue;
                     }
-                    
-                    int edgeCost = route->voyageCost;
-                    if (v != endIndex) {
-                        edgeCost += graphPorts[v]->dailyPortCharge;
+
+                    // Adjust arrival to match next-day departure if needed
+                    long long adjustedArr = arr;
+                    if (adjustedArr < adjustedDep)
+                        adjustedArr += 24LL * 60LL;
+
+                    // --- 3. Max voyage duration filter ---
+                    if (maxVoyageHours > 0) {
+                        if (adjustedArr - adjustedDep > maxVoyageHours * 60LL) {
+                            route = route->next;
+                            continue;
+                        }
                     }
-                    
-                    int tentativeGScore = (gScore[u] == MAX_COST) ? MAX_COST : gScore[u] + edgeCost;
-                    
-                    if (tentativeGScore < gScore[v]) {
+
+                    // --- 4. Cost of taking this route ---
+                    int edgeCost = route->voyageCost +
+                        (v != endIndex ? graphPorts[v]->dailyPortCharge : 0);
+
+                    long long tentativeG = gScore[u] + edgeCost;
+
+                    // --- 5. Bias preferred company ---
+                    if (route->shippingCompanyName == preferredCompany) {
+                        tentativeG -= 3;  // small bias
+                        usedPreferred = true;
+                    }
+
+                    // --- 6. Relax the edge normally ---
+                    if (tentativeG < gScore[v]) {
+                        gScore[v] = tentativeG;
                         parent[v] = u;
-                        gScore[v] = tentativeGScore;
+                        pq.push(PQNode(v, tentativeG));
+                    }
+
+                    route = route->next;
+                }
+            }
+
+            if (!usedPreferred || !preferredCompany.empty()) {
+                route = graphPorts[u]->routeHead;
+                while (route != nullptr) {
+                    int v = getPortIndex(route->destinationName);
+                    if (v == -1 || visited[v]) { route = route->next; continue; }
+
+                    // ←←←←← GLOBAL COMPANY FILTER — MUST BE IN BOTH PHASES →→→→→
+                    if (showOnlyActiveRoutes && !activeCompanyFilter.empty()) {
+                        if (route->shippingCompanyName != activeCompanyFilter) {
+                            route = route->next;
+                            continue;
+                        }
+                    }
+                    // ←←←←← END FILTER →→→→→
+
+                    bool skip = false;
+                    for (int i = 0; i < avoidPorts.size(); i++) {
+                        if (graphPorts[v]->portName == avoidPorts[i]) { skip = true; break; }
+                    }
+                    if (skip) { route = route->next; continue; }
+
+                    if (maxVoyageHours > 0) {
+                        long long dep = parseDateTimeToMinutes(route->date, route->departureTime);
+                        long long arr = parseDateTimeToMinutes(route->date, route->arrivalTime);
+                        if (arr < dep) arr += 24 * 60;
+                        if ((arr - dep) > maxVoyageHours * 60LL) { route = route->next; continue; }
+                    }
+
+                    int edgeCost = route->voyageCost + (v != endIndex ? graphPorts[v]->dailyPortCharge : 0);
+                    int tentativeG = gScore[u] + edgeCost;
+                    if (tentativeG < gScore[v]) {
+                        parent[v] = u;
+                        gScore[v] = tentativeG;
                         fScore[v] = gScore[v] + calculateHeuristic(v, endIndex);
                         pq.push(PQNode(v, gScore[v], calculateHeuristic(v, endIndex)));
                     }
+                    route = route->next;
                 }
-                route = route->next;
             }
         }
-        
-        if (gScore[endIndex] != MAX_COST) {
-            reconstructPath(result, parent, startIndex, endIndex);
-            result.totalCost = gScore[endIndex];
-            result.found = (result.path != nullptr && result.pathSize > 0);
-        }
-        
-        delete[] gScore;
-        delete[] fScore;
-        delete[] parent;
-        delete[] visited;
-        
+
+        delete[] gScore; delete[] fScore; delete[] parent; delete[] visited;
         return result;
     }
-    
-    void findCheapestRoute(int originIndex, int destinationIndex, const string& filterCompany = "") { // these will be called to calculate the paths
+
+    PathResult dijkstraFastestWithPrefs(
+        int startIndex, int endIndex,
+        const string& preferredCompany = "",
+        const SimpleVector<string>& avoidPorts = {},
+        int maxVoyageHours = -1
+    ) {
+        PathResult result;
+        if (startIndex < 0 || endIndex < 0) return result;
+
+        long long* bestArrival = new long long[currentSize];
+        int* parent = new int[currentSize];
+        bool* visited = new bool[currentSize];
+
+        for (int i = 0; i < currentSize; i++) {
+            bestArrival[i] = LLONG_MAX;
+            parent[i] = -1;
+            visited[i] = false;
+        }
+
+        SimplePriorityQueue<pair<long long, int>, 512> pq;
+        bestArrival[startIndex] = 0;
+        pq.push({ 0, startIndex });
+
+        while (!pq.empty()) {
+            pair<long long, int> curr = pq.top(); pq.pop();
+            long long time = curr.first;
+            int u = curr.second;
+            if (visited[u]) continue;
+            visited[u] = true;
+
+            if (u == endIndex) {
+                reconstructPath(result, parent, startIndex, endIndex);
+                result.totalTimeMinutes = bestArrival[u];
+                cout << endl << "Total Time: " << bestArrival[u] << endl;
+                result.found = true;
+                break;
+            }
+
+            graphEdgeRoute* route = graphPorts[u]->routeHead;
+            bool usedPreferred = false;
+
+            if (!preferredCompany.empty()) {
+                route = graphPorts[u]->routeHead;
+                while (route != nullptr) {
+                    int v = getPortIndex(route->destinationName);
+                    if (v == -1 || visited[v]) { route = route->next; continue; }
+                    // ←←←←← ADD THIS BLOCK HERE →→→→→
+                    if (showOnlyActiveRoutes && !activeCompanyFilter.empty()) {
+                        if (route->shippingCompanyName != activeCompanyFilter) {
+                            route = route->next;
+                            continue;
+                        }
+                    }
+                    // ←←←←← END BLOCK →→→→→
+
+                    bool skip = false;
+                    for (int i = 0; i < avoidPorts.size(); i++) {
+                        if (graphPorts[v]->portName == avoidPorts[i]) { skip = true; break; }
+                    }
+                    if (skip) { route = route->next; continue; }
+
+                    /*
+                    if (maxVoyageHours > 0) {
+                        long long dep = parseDateTimeToMinutes(route->date, route->departureTime);
+                        long long arr = parseDateTimeToMinutes(route->date, route->arrivalTime);
+                        if (arr < dep) arr += 24 * 60;
+                        if ((arr - dep) > maxVoyageHours * 60LL) { route = route->next; continue; }
+                    }
+
+                    long long dep = parseDateTimeToMinutes(route->date, route->departureTime);
+                    long long arr = parseDateTimeToMinutes(route->date, route->arrivalTime);
+                    if (arr < dep) arr += 24 * 60;
+
+                    if (time <= dep && route->shippingCompanyName == preferredCompany && arr < bestArrival[v]) {
+                        bestArrival[v] = arr;
+                        parent[v] = u;
+                        pq.push({ arr, v });
+                        usedPreferred = true;
+                    }
+                    route = route->next;
+                    */
+
+                    long long dep = parseDateTimeToMinutes(route->date, route->departureTime);
+                    long long arr = parseDateTimeToMinutes(route->date, route->arrivalTime);
+
+                    // If arrival is earlier than departure -> next day
+                    if (arr < dep) arr += 24LL * 60LL;
+
+                    // Adjust departure to be after current time (catching the ship)
+                    long long adjustedDep = dep;
+                    if (adjustedDep < time)
+                        adjustedDep += 24LL * 60LL;
+
+                    // If even after adjusting, you still cannot catch it → skip
+                    if (time > adjustedDep) {
+                        route = route->next;
+                        continue;
+                    }
+
+                    // Adjust arrival accordingly
+                    long long adjustedArr = arr;
+                    if (adjustedArr < adjustedDep)
+                        adjustedArr += 24LL * 60LL;
+
+                    // === ADD SHIP TO DOCKING QUEUE ===
+                    WaitingShip newShip;
+                    newShip.company = route->shippingCompanyName;
+                    newShip.arrivalTime = adjustedArr;
+                    newShip.serviceEndTime = adjustedArr + 8 * 60;  // 8 hours service
+
+                    // Add to this port's queue
+                    graphPorts[v]->dockingQueue.push_back(newShip);
+                    // Optional: reset docked count if needed
+                    graphPorts[v]->currentDocked = 0;
+                    // === END ADD SHIP ==
+
+                    // Optional: max voyage duration filter
+                    if (maxVoyageHours > 0) {
+                        if (adjustedArr - adjustedDep > maxVoyageHours * 60LL) {
+                            route = route->next;
+                            continue;
+                        }
+                    }
+
+                    // Relax edge: update best arrival
+                    if (adjustedArr < bestArrival[v]) {
+                        bestArrival[v] = adjustedArr;
+                        parent[v] = u;
+                        pq.push({ adjustedArr, v });
+                    }
+
+                    route = route->next;
+                }
+            }
+
+            if (!usedPreferred || !preferredCompany.empty()) {
+                route = graphPorts[u]->routeHead;
+                while (route != nullptr) {
+                    int v = getPortIndex(route->destinationName);
+                    if (v == -1 || visited[v]) { route = route->next; continue; }
+
+                    // ←←←←← GLOBAL COMPANY FILTER — MUST BE IN BOTH PHASES →→→→→
+                    if (showOnlyActiveRoutes && !activeCompanyFilter.empty()) {
+                        if (route->shippingCompanyName != activeCompanyFilter) {
+                            route = route->next;
+                            continue;
+                        }
+                    }
+                    // ←←←←← END FILTER →→→→→
+
+                    bool skip = false;
+                    for (int i = 0; i < avoidPorts.size(); i++) {
+                        if (graphPorts[v]->portName == avoidPorts[i]) { skip = true; break; }
+                    }
+                    if (skip) { route = route->next; continue; }
+
+                    if (maxVoyageHours > 0) {
+                        long long dep = parseDateTimeToMinutes(route->date, route->departureTime);
+                        long long arr = parseDateTimeToMinutes(route->date, route->arrivalTime);
+                        if (arr < dep) arr += 24 * 60;
+                        if ((arr - dep) > maxVoyageHours * 60LL) { route = route->next; continue; }
+                    }
+
+                    long long dep = parseDateTimeToMinutes(route->date, route->departureTime);
+                    long long arr = parseDateTimeToMinutes(route->date, route->arrivalTime);
+                    if (arr < dep) arr += 24 * 60;
+
+                    if (time <= dep && arr < bestArrival[v]) {
+                        bestArrival[v] = arr;
+                        parent[v] = u;
+                        pq.push({ arr, v });
+                    }
+                    route = route->next;
+                }
+            }
+        }
+
+        delete[] bestArrival; delete[] parent; delete[] visited;
+        return result;
+    }
+
+    PathResult aStarFastestWithPrefs(
+        int startIndex, int endIndex,
+        const string& preferredCompany = "",
+        const SimpleVector<string>& avoidPorts = {},
+        int maxVoyageHours = -1
+    ) {
+        PathResult result;
+        if (startIndex < 0 || endIndex < 0) return result;
+
+        long long* gScore = new long long[currentSize];
+        int* parent = new int[currentSize];
+        bool* visited = new bool[currentSize];
+
+        for (int i = 0; i < currentSize; i++) {
+            gScore[i] = LLONG_MAX;
+            parent[i] = -1;
+            visited[i] = false;
+        }
+
+        auto timeHeuristic = [&](int from, int to) -> long long {
+            if (!graphPorts[from]->hasCoordinates || !graphPorts[to]->hasCoordinates) return 0;
+            float dx = graphPorts[from]->position.x - graphPorts[to]->position.x;
+            float dy = graphPorts[from]->position.y - graphPorts[to]->position.y;
+            return (long long)(sqrt(dx * dx + dy * dy) * 0.1f);
+            };
+
+        SimplePriorityQueue<PQNode, 512> pq;
+        gScore[startIndex] = 0;
+        pq.push(PQNode(startIndex, 0, timeHeuristic(startIndex, endIndex)));
+
+        while (!pq.empty()) {
+            PQNode curr = pq.top(); pq.pop();
+            int u = curr.portIndex;
+            long long arrivalAtU = gScore[u];
+
+            if (visited[u]) continue;
+            visited[u] = true;
+
+            if (u == endIndex) {
+                reconstructPath(result, parent, startIndex, endIndex);
+                result.totalTimeMinutes = gScore[u];
+                cout << endl << "Total Time: " << gScore[u] << endl;
+                result.found = true;
+                break;
+            }
+
+            graphEdgeRoute* route = graphPorts[u]->routeHead;
+            bool usedPreferred = false;
+
+            if (!preferredCompany.empty()) {
+                route = graphPorts[u]->routeHead;
+                while (route != nullptr) {
+                    int v = getPortIndex(route->destinationName);
+                    if (v == -1 || visited[v]) { route = route->next; continue; }
+
+                    // ←←←←← ADD THIS BLOCK HERE →→→→→
+                    if (showOnlyActiveRoutes && !activeCompanyFilter.empty()) {
+                        if (route->shippingCompanyName != activeCompanyFilter) {
+                            route = route->next;
+                            continue;
+                        }
+                    }
+                    // ←←←←← END BLOCK →→→→→
+
+                    bool skip = false;
+                    for (int i = 0; i < avoidPorts.size(); i++) {
+                        if (graphPorts[v]->portName == avoidPorts[i]) { skip = true; break; }
+                    }
+                    if (skip) { route = route->next; continue; }
+
+                    /*
+                    if (maxVoyageHours > 0) {
+                        long long dep = parseDateTimeToMinutes(route->date, route->departureTime);
+                        long long arr = parseDateTimeToMinutes(route->date, route->arrivalTime);
+                        if (arr < dep) arr += 24 * 60;
+                        if ((arr - dep) > maxVoyageHours * 60LL) { route = route->next; continue; }
+                    }
+
+                    long long dep = parseDateTimeToMinutes(route->date, route->departureTime);
+                    long long arr = parseDateTimeToMinutes(route->date, route->arrivalTime);
+                    if (arr < dep) arr += 24 * 60;
+
+                    if (arrivalAtU <= dep && route->shippingCompanyName == preferredCompany && arr < gScore[v]) {
+                        gScore[v] = arr;
+                        parent[v] = u;
+                        pq.push(PQNode(v, arr, timeHeuristic(v, endIndex)));
+                        usedPreferred = true;
+                    }
+                    route = route->next;
+                    */
+
+                    long long dep = parseDateTimeToMinutes(route->date, route->departureTime);
+                    long long arr = parseDateTimeToMinutes(route->date, route->arrivalTime);
+
+                    // Normalize arrival (next-day arrival case)
+                    if (arr < dep) arr += 24LL * 60LL;
+
+                    // --- ADJUST DEPARTURE BASED ON ARRIVAL TIME AT U ---
+                    long long adjustedDep = dep;
+                    if (adjustedDep < arrivalAtU) {
+                        adjustedDep += 24LL * 60LL;   // catch tomorrow's ship
+                    }
+
+                    // If even after adjusting you still miss it → skip
+                    if (arrivalAtU > adjustedDep) {
+                        route = route->next;
+                        continue;
+                    }
+
+                    // Adjust arrival accordingly
+                    long long adjustedArr = arr;
+                    if (adjustedArr < adjustedDep)
+                        adjustedArr += 24LL * 60LL;
+
+                    // === ADD SHIP TO DOCKING QUEUE ===
+                    WaitingShip newShip;
+                    newShip.company = route->shippingCompanyName;
+                    newShip.arrivalTime = adjustedArr;
+                    newShip.serviceEndTime = adjustedArr + 8 * 60;  // 8 hours service
+
+                    // Add to this port's queue
+                    graphPorts[v]->dockingQueue.push_back(newShip);
+                    // Optional: reset docked count if needed
+                    graphPorts[v]->currentDocked = 0;
+                    // === END ADD SHIP ===
+
+                    // --- FILTER: Max voyage hours ---
+                    if (maxVoyageHours > 0) {
+                        if (adjustedArr - adjustedDep > maxVoyageHours * 60LL) {
+                            route = route->next;
+                            continue;
+                        }
+                    }
+
+                    // --- RELAX EDGE: If preferred company → add small bias ---
+                    long long candidateCost = adjustedArr;
+                    if (route->shippingCompanyName == preferredCompany) {
+                        candidateCost -= 5; // small priority bias
+                    }
+
+                    if (candidateCost < gScore[v]) {
+                        gScore[v] = candidateCost;
+                        parent[v] = u;
+                        pq.push(PQNode(v, candidateCost, timeHeuristic(v, endIndex)));
+                    }
+
+                    route = route->next;
+                }
+            }
+
+            if (!usedPreferred || !preferredCompany.empty()) {
+                route = graphPorts[u]->routeHead;
+                while (route != nullptr) {
+                    int v = getPortIndex(route->destinationName);
+                    if (v == -1 || visited[v]) { route = route->next; continue; }
+                    // ←←←←← GLOBAL COMPANY FILTER — MUST BE IN BOTH PHASES →→→→→
+                    if (showOnlyActiveRoutes && !activeCompanyFilter.empty()) {
+                        if (route->shippingCompanyName != activeCompanyFilter) {
+                            route = route->next;
+                            continue;
+                        }
+                    }
+                    // ←←←←← END FILTER →→→→→
+
+                    bool skip = false;
+                    for (int i = 0; i < avoidPorts.size(); i++) {
+                        if (graphPorts[v]->portName == avoidPorts[i]) { skip = true; break; }
+                    }
+                    if (skip) { route = route->next; continue; }
+
+                    if (maxVoyageHours > 0) {
+                        long long dep = parseDateTimeToMinutes(route->date, route->departureTime);
+                        long long arr = parseDateTimeToMinutes(route->date, route->arrivalTime);
+                        if (arr < dep) arr += 24 * 60;
+                        if ((arr - dep) > maxVoyageHours * 60LL) { route = route->next; continue; }
+                    }
+
+                    long long dep = parseDateTimeToMinutes(route->date, route->departureTime);
+                    long long arr = parseDateTimeToMinutes(route->date, route->arrivalTime);
+                    if (arr < dep) arr += 24 * 60;
+
+                    if (arrivalAtU <= dep && arr < gScore[v]) {
+                        gScore[v] = arr;
+                        parent[v] = u;
+                        pq.push(PQNode(v, arr, timeHeuristic(v, endIndex)));
+                    }
+                    route = route->next;
+                }
+            }
+        }
+
+        delete[] gScore; delete[] parent; delete[] visited;
+        return result;
+    }
+
+    // FASTEST MULTI-LEG ROUTE — PURE LINKED LIST (NO VECTOR!)
+    /*
+    PathResult findFastestMultiLeg(const MultiLegJourney& journey, bool useAStar = true) {
+        PathResult finalResult;
+        finalResult.found = true;
+        finalResult.totalTimeMinutes = 0;
+
+        if (journey.legCount < 2) {
+            finalResult.found = false;
+            return finalResult;
+        }
+
+        JourneyLeg* fromLeg = journey.head;
+        JourneyLeg* toLeg = fromLeg->next;
+
+        while (toLeg != nullptr) {
+            int from = fromLeg->portIndex;
+            int to = toLeg->portIndex;
+
+            PathResult segment;
+            if (useAStar)
+                segment = aStarFastestWithPrefs(from, to, "", {}, -1);
+            else
+                segment = dijkstraFastestWithPrefs(from, to, "", {}, -1);
+
+            if (!segment.found) {
+                finalResult.found = false;
+                addLog("No route from " + graphPorts[from]->portName + " to " + graphPorts[to]->portName);
+                return finalResult;
+            }
+
+            // Append segment path (skip first node — already in previous leg)
+            for (int i = 1; i < segment.pathSize; i++) {
+                finalResult.path[finalResult.pathSize++] = segment.path[i];
+            }
+
+            finalResult.totalTimeMinutes += segment.totalTimeMinutes;
+
+            // Move to next pair
+            fromLeg = toLeg;
+            toLeg = toLeg->next;
+        }
+
+        return finalResult;
+    }
+    */
+    /*
+    PathResult findFastestMultiLeg(const MultiLegJourney& journey, bool useAStar = true) {
+        PathResult finalResult;
+        finalResult.found = true;
+        finalResult.totalTimeMinutes = 0;
+
+        if (journey.legCount < 2) {
+            finalResult.found = false;
+            return finalResult;
+        }
+
+        JourneyLeg* fromLeg = journey.head;
+        JourneyLeg* toLeg = fromLeg->next;
+
+        while (toLeg != nullptr) {
+            int from = fromLeg->portIndex;
+            int to = toLeg->portIndex;
+
+            PathResult segment = useAStar ?
+                aStarFastestWithPrefs(from, to, "", {}, -1) :
+                dijkstraFastestWithPrefs(from, to, "", {}, -1);
+
+            if (!segment.found || segment.pathSize == 0) {
+                finalResult.found = false;
+                return finalResult;
+            }
+
+            // ←←←←← SAFE COPY →→→→→
+            for (int j = 1; j < segment.pathSize; j++) {
+                if (finalResult.pathSize < 510) {  // leave room for null terminator if needed
+                    //finalResult.
+                }
+            }
+
+            finalResult.totalTimeMinutes += segment.totalTimeMinutes;
+
+            fromLeg = toLeg;
+            toLeg = toLeg->next;
+        }
+
+        return finalResult;
+    }
+    */
+
+    /*
+    PathResult findFastestMultiLeg(const MultiLegJourney& journey, bool useAStar = true) {
+        PathResult result;
+        result.path = nullptr;
+        result.pathSize = 0;
+        result.totalCost = 0;
+        result.totalTimeMinutes = 0;
+        result.found = true;
+
+        if (journey.legCount < 2) {
+            result.found = false;
+            return result;
+        }
+
+        // Temporary buffer — safe zone
+        int tempPath[1024];
+        int tempSize = 0;
+
+        JourneyLeg* fromLeg = journey.head;
+        JourneyLeg* toLeg = fromLeg->next;
+
+        while (toLeg != nullptr && result.found) {
+            int from = fromLeg->portIndex;
+            int to = toLeg->portIndex;
+
+            PathResult segment = useAStar ?
+                aStarFastestWithPrefs(from, to, "", {}, -1) :
+                dijkstraFastestWithPrefs(from, to, "", {}, -1);
+
+            if (!segment.found || segment.pathSize == 0) {
+                result.found = false;
+                addLog("No route from " + graphPorts[from]->portName + " to " + graphPorts[to]->portName);
+                break;
+            }
+
+            // Append segment (skip first node — already added)
+            for (int j = 1; j < segment.pathSize; j++) {
+                if (tempSize >= 1020) {  // safety limit
+                    addLog("Warning: Multi-leg path too long — truncated!");
+                    result.found = true;
+                    goto allocate_final;
+                }
+                tempPath[tempSize++] = segment.path[j];
+            }
+
+            result.totalTimeMinutes += segment.totalTimeMinutes;
+
+            fromLeg = toLeg;
+            toLeg = toLeg->next;
+        }
+
+    allocate_final:
+        if (result.found && tempSize > 0) {
+            result.path = new int[tempSize];
+            for (int i = 0; i < tempSize; i++) {
+                result.path[i] = tempPath[i];
+            }
+            result.pathSize = tempSize;
+        }
+
+        return result;
+    }
+    */
+    void findCheapestRoute(int originIndex, int destinationIndex, const string& filterCompany = "")
+    {
         if (originIndex < 0 || destinationIndex < 0) {
             cout << "Error: Please select both origin and destination ports." << endl;
             return;
         }
-        
-        currentPath = dijkstraShortestPath(originIndex, destinationIndex, filterCompany);
-        
+
+        if (useAStar)
+            currentPath = aStarCheapestWithPrefs(originIndex, destinationIndex, filterCompany);
+        else
+            currentPath = dijkstraShortestPath(originIndex, destinationIndex, filterCompany);
+
         if (currentPath.found && currentPath.path != nullptr && currentPath.pathSize > 0) {
-            // can add graphics // i did console output for now idk how it would work
-            
             cout << "\n=== CHEAPEST ROUTE FOUND ===" << endl;
             cout << "From: " << graphPorts[originIndex]->portName << endl;
             cout << "To: " << graphPorts[destinationIndex]->portName << endl;
             cout << "Total Cost: $" << currentPath.totalCost << endl;
-            cout << "Path: "; // for now it should be fine
+
+            /*
+            // ←←←←← ADD THE QUEUE CODE RIGHT HERE — AFTER THE COUT LINES →→→→→
+            
+            for (int i = 0; i < currentPath.pathSize - 1; i++) {
+                int portIdx = currentPath.path[i];
+
+                WaitingShip ship;
+                ship.company = filterCompany.empty() ? "CargoLine" : filterCompany;
+                ship.arrivalTime = 100000 + i * 3000;
+                ship.serviceEndTime = ship.arrivalTime + 8 * 60;
+
+                graphPorts[portIdx]->dockingQueue.push_back(ship);
+            }
+            // ←←←←← END OF QUEUE CODE →→→→→
+            */
+            // ←←←←← ADD SHIPS TO QUEUE — RIGHT HERE →→→→→
+            for (int i = 0; i < currentPath.pathSize - 1; i++) {
+                int portIdx = currentPath.path[i];
+
+                WaitingShip ship;
+                ship.company = selectedCompany.empty() ? "CargoLine" : selectedCompany;
+                ship.arrivalTime = globalSimulationTime + i * 5000;
+                ship.serviceEndTime = ship.arrivalTime + 8 * 60;
+
+                graphPorts[portIdx]->dockingQueue.push_back(ship);
+                cout << "ADDED SHIP to " << graphPorts[portIdx]->portName << endl;
+            }
+            // ←←←←← END →→→→→
+
+            // AFTER your queue-adding loop
+            cout << "=== DOCKING QUEUE DEBUG ===" << endl;
+            for (int i = 0; i < currentPath.pathSize - 1; i++) {
+                int portIdx = currentPath.path[i];
+                cout << "Port " << graphPorts[portIdx]->portName
+                    << " now has " << graphPorts[portIdx]->dockingQueue.size()
+                    << " ships in queue" << endl;
+            }
+            cout << "==========================" << endl;
+
+            addLog("=== CHEAPEST ROUTE FOUND ===");
+            addLog("From: " + graphPorts[originIndex]->portName);
+
+            addLog("=== DOCKING QUEUE DEBUG ===");
+            for (int i = 0; i < currentPath.pathSize - 1; i++) {
+                int portIdx = currentPath.path[i];
+                addLog("Port " + graphPorts[portIdx]->portName +
+                    " now has " + to_string(graphPorts[portIdx]->dockingQueue.size()) +
+                    " ships in queue");
+            }
+            addLog("==========================");
+
+            cout << "Path: ";
             for (int i = 0; i < currentPath.pathSize; i++) {
                 cout << graphPorts[currentPath.path[i]]->portName;
-                if (i < currentPath.pathSize - 1)
-                    cout << " -> ";
+                if (i < currentPath.pathSize - 1) cout << " -> ";
+            }
+
+            // Copy to highlightedPath
+            highlightedPath.clear();
+            for (int i = 0; i < currentPath.pathSize; i++) {
+                highlightedPath.push_back(currentPath.path[i]);
             }
             cout << endl;
-            cout << "===========================" << endl;
-        } else {
-            cout << "\nNo route found from " << graphPorts[originIndex]->portName 
-                 << " to " << graphPorts[destinationIndex]->portName << endl;
+        }
+        else {
+            cout << "\nNo route found." << endl;
         }
     }
-    
-    void findFastestRoute(int originIndex, int destinationIndex, const string& filterCompany = "") {
+
+    void findFastestRoute(int originIndex, int destinationIndex, const string& filterCompany = "")
+    {
         if (originIndex < 0 || destinationIndex < 0) {
             cout << "Error: Please select both origin and destination ports." << endl;
             return;
         }
-        
-        currentPath = aStarShortestPath(originIndex, destinationIndex, filterCompany);
-        
+
+        if (useAStar)
+            currentPath = aStarFastestWithPrefs(originIndex, destinationIndex, filterCompany);
+        else
+            currentPath = dijkstraFastestWithPrefs(originIndex, destinationIndex, filterCompany);
+
         if (currentPath.found && currentPath.path != nullptr && currentPath.pathSize > 0) {
-            // can add graphics // i did console output for now idk how it would work
-            
-            cout << "\n=== FASTEST/OPTIMAL ROUTE FOUND (A*) ===" << endl;
+            cout << "\n=== FASTEST ROUTE FOUND ===" << endl;
             cout << "From: " << graphPorts[originIndex]->portName << endl;
             cout << "To: " << graphPorts[destinationIndex]->portName << endl;
-            cout << "Total Cost: $" << currentPath.totalCost << endl;
+
+            /*
+            // ←←←←← ADD THE EXACT SAME QUEUE CODE HERE →→→→→
+            for (int i = 0; i < currentPath.pathSize - 1; i++) {
+                int portIdx = currentPath.path[i];
+
+                WaitingShip ship;
+                ship.company = filterCompany.empty() ? "ExpressLine" : filterCompany;
+                ship.arrivalTime = 100000 + i * 3000;
+                ship.serviceEndTime = ship.arrivalTime + 8 * 60;
+
+                graphPorts[portIdx]->dockingQueue.push_back(ship);
+            }
+            // ←←←←← END →→→→→
+            */
+          
+            // AFTER your queue-adding loop
+            cout << "=== DOCKING QUEUE DEBUG ===" << endl;
+            for (int i = 0; i < currentPath.pathSize - 1; i++) {
+                int portIdx = currentPath.path[i];
+                cout << "Port " << graphPorts[portIdx]->portName
+                    << " now has " << graphPorts[portIdx]->dockingQueue.size()
+                    << " ships in queue" << endl;
+            }
+            cout << "==========================" << endl;
+
+            addLog("=== FASTEST ROUTE FOUND ===");
+            addLog("From: " + graphPorts[originIndex]->portName);
+            
+
             cout << "Path: ";
             for (int i = 0; i < currentPath.pathSize; i++) {
                 cout << graphPorts[currentPath.path[i]]->portName;
-                if (i < currentPath.pathSize - 1)
-                    cout << " -> ";
-                }
+                if (i < currentPath.pathSize - 1) cout << " -> ";
+            }
             cout << endl;
-            cout << "========================================" << endl;
-        } else {
-            cout << "\nNo route found from " << graphPorts[originIndex]->portName 
-                 << " to " << graphPorts[destinationIndex]->portName << endl;
+
+            // Copy to highlightedPath
+            highlightedPath.clear();
+            for (int i = 0; i < currentPath.pathSize; i++) {
+                highlightedPath.push_back(currentPath.path[i]);
+            }
         }
+        else {
+            cout << "\nNo route found." << endl;
+        }
+    }
+
+
+    sf::Color getCostColor(int cost) const {
+        if (cost < 15000) return sf::Color(100, 255, 150, 200);      // Green - Low cost
+        else if (cost < 25000) return sf::Color(255, 230, 100, 200); // Yellow - Medium cost
+        else if (cost < 35000) return sf::Color(255, 180, 100, 200); // Orange - High cost
+        else return sf::Color(255, 100, 100, 200);                   // Red - Very high cost
     }
 
     void assignPositions(float width, float height) {
@@ -957,7 +2021,8 @@ struct oceanRouteGraph {
                 float x = (lon + 180.0f) / 360.0f * mapWidth;
                 float y = (90.0f - lat) / 180.0f * mapHeight;
                 graphPorts[i]->position = sf::Vector2f(x, y);
-            } else {
+            }
+            else {
                 // If no coordinates, do not place the port
                 graphPorts[i]->position = sf::Vector2f(-1000.f, -1000.f); // Off-screen
             }
@@ -992,7 +2057,8 @@ struct oceanRouteGraph {
                 try {
                     lat = stod(tokens[tokens.size() - 2]);
                     lon = stod(tokens[tokens.size() - 1]);
-                } catch (...) { continue; }
+                }
+                catch (...) { continue; }
                 portName = "";
                 for (size_t i = 0; i < tokens.size() - 2; ++i) {
                     if (i > 0) portName += " ";
@@ -1013,31 +2079,108 @@ struct oceanRouteGraph {
         return true;
     }
 
+
     void handlePanelAction(const string& action, bool& showQueryPanel)
     {
         cout << "Action pressed: " << action << endl;
-
+        
         if (action == "Find Cheapest Route") {
-            runCheapest = true;
             if (selectedOrigin != -1 && selectedDestination != -1) {
-                findCheapestRoute(selectedOrigin, selectedDestination, selectedCompany);
+                highlightedPath.clear();  // ← THIS FIXES THE HIGHLIGHT BUG
+                string companyToUse = showOnlyActiveRoutes ? activeCompanyFilter : selectedCompany;
+                // Always use COST-BASED algorithms for "Cheapest"
+                if (useAStar)
+                    currentPath = aStarCheapestWithPrefs(selectedOrigin, selectedDestination, companyToUse);
+                else
+                    currentPath = dijkstraShortestPath(selectedOrigin, selectedDestination, companyToUse);
+
+                // Copy path to highlightedPath
+                highlightedPath.clear();
+                if (currentPath.found && currentPath.pathSize > 0) {
+                    for (int i = 0; i < currentPath.pathSize; i++) {
+                        highlightedPath.push_back(currentPath.path[i]);
+                    }
+                }
                 showQueryPanel = false;
-            } else {
+
+                cout << "\n=== CHEAPEST ROUTE FOUND (A* enabled: " << (useAStar ? "YES" : "NO") << ") ===" << endl;
+                cout << "From: " << graphPorts[selectedOrigin]->portName << endl;
+                cout << "To: " << graphPorts[selectedDestination]->portName << endl;
+                cout << "Total Cost: $" << currentPath.totalCost << endl;
+            }
+            else {
                 cout << "Error: Please select both origin and destination ports first." << endl;
             }
         }
         else if (action == "Find Fastest Route") {
-            runFastest = true;
             if (selectedOrigin != -1 && selectedDestination != -1) {
-                findFastestRoute(selectedOrigin, selectedDestination, selectedCompany);
+                highlightedPath.clear();  // ← THIS FIXES THE HIGHLIGHT BUG
+                string companyToUse = showOnlyActiveRoutes ? activeCompanyFilter : selectedCompany;
+                // Always use TIME-BASED algorithms for "Fastest"
+                if (useAStar)
+                    currentPath = aStarFastestWithPrefs(selectedOrigin, selectedDestination, companyToUse);
+                else
+                    currentPath = dijkstraFastestWithPrefs(selectedOrigin, selectedDestination, companyToUse);
+
+                // Copy path to highlightedPath
+                highlightedPath.clear();
+                if (currentPath.found && currentPath.pathSize > 0) {
+                    for (int i = 0; i < currentPath.pathSize; i++) {
+                        highlightedPath.push_back(currentPath.path[i]);
+                    }
+                }
+
+                cout << "\n=== FASTEST ROUTE FOUND (A* enabled: " << (useAStar ? "YES" : "NO") << ") ===" << endl;
+                cout << "From: " << graphPorts[selectedOrigin]->portName << endl;
+                cout << "To: " << graphPorts[selectedDestination]->portName << endl;
+                cout << "Total Time: " << currentPath.totalTimeMinutes << " minutes" << endl;
+
                 showQueryPanel = false;
-            } else {
+            }
+            else {
                 cout << "Error: Please select both origin and destination ports first." << endl;
             }
         }
+        else if (action == "ToggleAlgorithm")
+        {
+            useAStar = !useAStar;
+            cout << "Algorithm switched to: "
+                << (useAStar ? "A*" : "Dijkstra") << endl;
+        }
+        else if (action == "Build Multi-Leg Route") {
+            buildingMultiLeg = !buildingMultiLeg;
+
+            if (buildingMultiLeg) {
+                cout << "Multi-leg mode ON — click ports in order" << endl;
+                // DO NOT CLEAR — keep previous journey!
+                currentJourney.clear(); // ← DELETE THIS LINE
+                if (currentJourney.legCount == 0) {
+                    addLog("Started new multi-leg journey");
+                }
+            }
+            else {
+                cout << "Multi-leg mode OFF" << endl;
+                addLog("Multi-leg journey saved (" + to_string(currentJourney.legCount) + " legs)");
+            }
+        }
         else if (action == "Filter by Company") {
-            runCompanyFilter = true;
-            // TODO: Implement company filtering
+            if (selectedCompany.empty()) {
+                // If no company typed → turn OFF filter
+                showOnlyActiveRoutes = false;
+                activeCompanyFilter = "";
+                addLog("Company filter OFF — showing all routes");
+            }
+            else {
+                // Turn ON filter with selected company
+                activeCompanyFilter = selectedCompany;
+                showOnlyActiveRoutes = true;
+                // ← THIS ACTIVATES THE FILTER
+                addLog("Company filter ON: " + activeCompanyFilter);
+            }
+
+            generateSubgraph();  // ← REBUILD VISIBLE PORTS/EDGES
+            highlightedPath.clear();  // ← clear old path
+            showQueryPanel = false;
         }
         else if (action == "Generate Subgraph") {
             runSubgraph = true;
@@ -1049,6 +2192,80 @@ struct oceanRouteGraph {
         }
     }
 
+    void visualizeExplorationStep(int currentNode, sf::RenderWindow& window, sf::Sprite* mapSprite, bool mapLoaded, int windowWidth, int windowHeight, sf::Font& font) {
+        if (!showAlgorithmVisualization) return;
+
+        // Background
+        if (mapLoaded && mapSprite) {
+            window.draw(*mapSprite);
+        }
+        else {
+            window.clear(sf::Color(15, 20, 35));
+        }
+
+        // Grid
+        for (int x = 0; x < windowWidth; x += 50) {
+            sf::RectangleShape line(sf::Vector2f(1, (float)windowHeight));
+            line.setPosition(sf::Vector2f((float)x, 0.0f));
+            line.setFillColor(sf::Color(30, 35, 50, 30));
+            window.draw(line);
+        }
+        for (int y = 0; y < windowHeight; y += 50) {
+            sf::RectangleShape line(sf::Vector2f((float)windowWidth, 1));
+            line.setPosition(sf::Vector2f(0.0f, (float)y));
+            line.setFillColor(sf::Color(30, 35, 50, 30));
+            window.draw(line);
+        }
+
+        // Dim edges
+        for (int i = 0; i < currentSize; i++) {
+            if (!graphPorts[i]) continue;
+            graphEdgeRoute* r = graphPorts[i]->routeHead;
+            while (r) {
+                int v = getPortIndex(r->destinationName);
+                if (v != -1 && graphPorts[v]) {
+                    sf::Vertex line[] = {
+                        sf::Vertex(graphPorts[i]->position, sf::Color(80,80,80,80)),
+                        sf::Vertex(graphPorts[v]->position, sf::Color(80,80,80,80))
+                    };
+                    window.draw(line, 2, sf::PrimitiveType::Lines);
+                }
+                r = r->next;
+            }
+        }
+
+        // Nodes
+        for (int i = 0; i < currentSize; i++) {
+            if (!graphPorts[i]) continue;
+
+            sf::Color color = sf::Color(60, 120, 200);
+
+            // Closed = red
+            for (int j = 0; j < vizClosedSet.size(); j++) {
+                if (vizClosedSet[j] == i) color = sf::Color(255, 100, 100);
+            }
+            // Open = yellow
+            for (int j = 0; j < vizOpenSet.size(); j++) {
+                if (vizOpenSet[j] == i) color = sf::Color(255, 255, 100);
+            }
+            // Current = green
+            if (i == currentNode) color = sf::Color(100, 255, 100);
+            // Selected
+            if (i == selectedOrigin) color = sf::Color(100, 255, 150);
+            if (i == selectedDestination) color = sf::Color(255, 180, 100);
+
+            sf::CircleShape node(16);
+            node.setPosition(graphPorts[i]->position - sf::Vector2f(16, 16));
+            node.setFillColor(color);
+            node.setOutlineThickness(4);
+            node.setOutlineColor(sf::Color::White);
+            window.draw(node);
+        }
+
+        window.display();
+        sf::sleep(sf::milliseconds(100));
+    }
+    
 
     void visualizeGraph(int windowWidth = 1800, int windowHeight = 900) {
         // Try to load optional coordinates and world map before assigning positions
@@ -1057,7 +2274,7 @@ struct oceanRouteGraph {
         assignPositions(static_cast<float>(windowWidth), static_cast<float>(windowHeight));
 
         sf::RenderWindow window(sf::VideoMode({ static_cast<unsigned int>(windowWidth), static_cast<unsigned int>(windowHeight) }), "Ocean Route Network - Interactive Graph", sf::Style::Close);
-        window.setFramerateLimit(100);
+        window.setFramerateLimit(160);
 
         sf::Texture mapTexture;
         sf::Sprite* mapSprite = nullptr;
@@ -1100,7 +2317,7 @@ struct oceanRouteGraph {
         bool useAStar = false; // false = Dijkstra, true = A*
 
         // Path highlighting
-        std::vector<int> highlightedPath;
+        //std::vector<int> highlightedPath;
 
         // Button positions for click detection (will be set during rendering)
         struct ButtonBounds {
@@ -1141,6 +2358,120 @@ struct oceanRouteGraph {
                             if (mx >= btn.x && mx <= btn.x + btn.width &&
                                 my >= btn.y && my <= btn.y + btn.height)
                             {
+
+                                if (btn.action == "ToggleAlgorithm") {
+                                    useAStar = !useAStar;
+                                    cout << "Algorithm switched to: "
+                                        << (useAStar ? "A*" : "Dijkstra") << endl;
+
+                                    highlightedPath.clear();   // ⭐ NOW WE CAN CLEAR IT HERE
+                                    continue;
+                                } 
+
+                                if (btn.action == "Build Multi-Leg Route") {
+                                    
+                                    buildingMultiLeg = !buildingMultiLeg;
+                                    if (!buildingMultiLeg) {
+                                        cout << "Multi-leg mode OFF" << endl;
+                                    }
+                                    else {
+                                        cout << "Multi-leg mode ON — click ports in order" << endl;
+                                    }
+                                    currentJourney = MultiLegJourney();  // clear old journey
+                                    highlightedPath.clear();             // optional: clear old path
+                                    continue;
+                                    
+                                   
+                                }
+
+                                if (btn.action == "Simulate Journey") {
+                                    
+                                    simulationMode = true;
+                                    if (currentPath.found && currentPath.pathSize > 0) {
+                                        cout << "SIMULATING JOURNEY..." << endl;
+                                        showQueryPanel = false;
+                                        // ADD SHIPS TO EVERY PORT ON THE PATH
+                                        for (int i = 0; i < currentPath.pathSize - 1; i++) {
+                                            int portIdx = currentPath.path[i];
+
+                                            WaitingShip ship;
+                                            ship.company = selectedCompany.empty() ? "CargoLine" : selectedCompany;
+                                            ship.arrivalTime = globalSimulationTime + i * 5000;
+                                            ship.serviceEndTime = ship.arrivalTime + 8 * 60;
+
+                                            graphPorts[portIdx]->dockingQueue.push_back(ship);
+                                            cout << "Ship arrived at " << graphPorts[portIdx]->portName << endl;
+                                        }
+
+                                        globalSimulationTime += 100000;  // advance time
+
+                                        // ←←←← START WHOOSH EFFECT →→→→
+                                        showWhoosh = true;
+                                        whooshProgress = 0.0f;
+                                        whooshClock.restart();
+                                        // ←←←← END →→→→
+                                    }
+
+                                    //simulationMode = false;
+                                    
+
+                                    /*
+                                    simulationMode = true;
+                                    if (currentJourney.legCount < 2) {
+                                        addLog("Error: Build a multi-leg journey with at least 2 stops first!");
+                                        return;
+                                    }
+
+                                    addLog("SIMULATING MULTI-LEG JOURNEY...");
+
+                                    // ←←←←USE MULTI-LEG FASTEST PATH (A* OR DIJKSTRA) →→→→→
+                                    
+                                    currentPath = findFastestMultiLeg(currentJourney, useAStar);
+
+                                    if (!currentPath.found) {
+                                        addLog("No complete route found for this journey!");
+                                        return;
+                                    }
+
+                                    // ←←←←← COPY TO HIGHLIGHTED PATH FOR DRAWING →→→→→
+                                    highlightedPath.clear();
+                                    for (int i = 0; i < currentPath.pathSize; i++) {
+                                        highlightedPath.push_back(currentPath.path[i]);
+                                    }
+                                    
+
+                                    // ←←←←← ADD SHIPS TO EVERY PORT ON THE FINAL ROUTE →→→→→
+                                    for (int i = 0; i < currentPath.pathSize - 1; i++) {
+                                        int portIdx = currentPath.path[i];
+
+                                        WaitingShip ship;
+                                        ship.company = selectedCompany.empty() ? "CargoLine" : selectedCompany;
+                                        ship.arrivalTime = globalSimulationTime + i * 8000;  // spaced out
+                                        ship.serviceEndTime = ship.arrivalTime + 8 * 60;
+
+                                        graphPorts[portIdx]->dockingQueue.push_back(ship);
+                                        addLog("Ship arrived at " + graphPorts[portIdx]->portName);
+                                    }
+
+                                    // ←←←←← ADVANCE TIME + START WHOOSH →→→→→
+                                    globalSimulationTime += 150000;
+                                    showWhoosh = true;
+                                    whooshProgress = 0.0f;
+                                    whooshClock.restart();
+
+                                    addLog("Journey simulation started — " + to_string(currentPath.totalTimeMinutes / 60) + " hours total");
+                                    showQueryPanel = false;
+                                    */
+                                }
+
+                                if (btn.action == "Filter by Company") {
+                                    activeCompanyFilter = selectedCompany;
+                                    showOnlyActiveRoutes = !showOnlyActiveRoutes;
+                                    generateSubgraph();
+                                }
+
+                                
+                                
                                 handlePanelAction(btn.action, showQueryPanel);
                             }
                         }
@@ -1169,19 +2500,75 @@ struct oceanRouteGraph {
                         continue;
                     }
                     // If panel closed: allow ports to be selected
-                    if (!showQueryPanel)
-                    {
+
+                    if (!showQueryPanel) {
+                        /*
                         if (hoveredPort != -1) {
+                            if (buildingMultiLeg) {
+                                // MULTI-LEG MODE: Add port to journey
+                                currentJourney.addLeg(hoveredPort);
+                                cout << "Added: " << graphPorts[hoveredPort]->portName << endl;
+                            }
+                            else {
+                                // NORMAL MODE: Select origin/destination
+                                if (selectedOrigin == -1) {
+                                    selectedOrigin = hoveredPort;
+                                    cout << "Origin: " << graphPorts[hoveredPort]->portName << endl;
+                                }
+                                else if (selectedDestination == -1) {
+                                    selectedDestination = hoveredPort;
+                                    cout << "Destination: " << graphPorts[hoveredPort]->portName << endl;
+                                }
+                                else {
+                                    // Click again to change origin
+                                    selectedOrigin = hoveredPort;
+                                    selectedDestination = -1;
+                                    cout << "Origin changed to: " << graphPorts[hoveredPort]->portName << endl;
+                                }
+                            }
+                        }
+                        */
+                        if (buildingMultiLeg) {
+                            // ←←←←← CLICK-TO-REMOVE + CLICK-TO-ADD →→→→→
+                            bool removed = false;
+                            JourneyLeg* leg = currentJourney.head;
+                            while (leg) {
+                                sf::Vector2f pos = graphPorts[leg->portIndex]->position;
+                                float dx = clickPosF.x - pos.x;
+                                float dy = clickPosF.y - pos.y;
+                                if (dx * dx + dy * dy < 400) {
+                                    int portToRemove = leg->portIndex;  // ← SAVE FIRST!
+                                    string portName = graphPorts[portToRemove]->portName;
+
+                                    currentJourney.removeLeg(portToRemove);  // now safe to delete
+
+                                    addLog("Removed stop: " + portName);
+                                    removed = true;
+                                    break;
+                                }
+                                leg = leg->next;
+                            }
+
+                            if (!removed) {
+                                currentJourney.addLeg(hoveredPort);
+                                addLog("Added stop: " + graphPorts[hoveredPort]->portName);
+                            }
+                            // ←←←←← END →→→→→
+                        }
+                        else {
+                            // NORMAL MODE: Select origin/destination
                             if (selectedOrigin == -1) {
                                 selectedOrigin = hoveredPort;
-                                highlightedPath.clear();
-                            } else if (selectedDestination == -1) {
+                                cout << "Origin: " << graphPorts[hoveredPort]->portName << endl;
+                            }
+                            else if (selectedDestination == -1) {
                                 selectedDestination = hoveredPort;
-                                highlightedPath.clear();
-                            } else {
+                                cout << "Destination: " << graphPorts[hoveredPort]->portName << endl;
+                            }
+                            else {
                                 selectedOrigin = hoveredPort;
                                 selectedDestination = -1;
-                                highlightedPath.clear();
+                                cout << "Origin changed to: " << graphPorts[hoveredPort]->portName << endl;
                             }
                         }
                     }
@@ -1206,12 +2593,14 @@ struct oceanRouteGraph {
                                 if (selectedCompany.size() < 20)
                                     selectedCompany += c;
                                 cout << selectedCompany << endl;
+                                
                             }
                         }
                     }
                 }
+                
 
-         
+
 
                 sf::Vector2i mousePos = sf::Mouse::getPosition(window);
                 sf::Vector2f mousePosF(static_cast<float>(mousePos.x), static_cast<float>(mousePos.y));
@@ -1232,12 +2621,14 @@ struct oceanRouteGraph {
                 if (mapLoaded) {
                     window.clear(sf::Color::Black);
                     if (mapSprite) window.draw(*mapSprite);
-                } else {
+                }
+                else {
                     window.clear(sf::Color(15, 20, 35));
                 }
                 // Reset for this frame
                 buttonBounds.clear();
                 hoveredButton = -1;
+
 
 
                 for (int x = 0; x < windowWidth; x += 50) {
@@ -1434,7 +2825,8 @@ struct oceanRouteGraph {
                     };
 
                     Button buttons[] = {
-                        {"Hi", sf::Color(100,200,120)},
+                        //{"Hi", sf::Color(100,200,120)},
+                        {"Build Multi-Leg Route", sf::Color(100, 200, 255)},
                         {"Find Cheapest Route", sf::Color(100, 200, 120)},
                         {"Find Fastest Route", sf::Color(255, 180, 80)},
                         {"Filter by Company", sf::Color(180, 100, 220)},
@@ -1524,8 +2916,11 @@ struct oceanRouteGraph {
                     // --- AUTO PATHFINDING & HIGHLIGHTING ---
                     if (selectedOrigin != -1 && selectedDestination != -1 && highlightedPath.empty()) {
                         if (useAStar) {
+                            //highlightedPath.clear();
                             findFastestRoute(selectedOrigin, selectedDestination, selectedCompany);
-                        } else {
+                        }
+                        else {
+                            highlightedPath.clear();
                             findCheapestRoute(selectedOrigin, selectedDestination, selectedCompany);
                         }
                         if (currentPath.found && currentPath.path != nullptr && currentPath.pathSize > 0) {
@@ -1593,11 +2988,31 @@ struct oceanRouteGraph {
                                     float length = std::sqrt(delta.x * delta.x + delta.y * delta.y);
                                     float angle = std::atan2(delta.y, delta.x) * 180.f / 3.14159265f;
 
-                                    sf::Color edgeColor(120, 30, 30, 180); // default dark red
+                                    //sf::Color edgeColor(120, 30, 30, 180); // default dark red
+                                    //sf::Color edgeColor(50, 240, 255, 255);
+                                    //sf::Color edgeColor(160, 32, 240, 255);
+                                    /*
+                                    sf::Color edgeColor = showOnlyActiveRoutes ?
+                                        sf::Color(100, 255, 150, 255) :  // bright green when filtered
+                                        sf::Color(120, 30, 30, 180);     // dark red when not
+                                    */
+
+                                    sf::Color edgeColor = showOnlyActiveRoutes ?
+                                        getCostColor(route->voyageCost) :           // ← COST COLOR IN SUBGRAPH
+                                        sf::Color(120, 30, 30, 180);                // ← DARK RED WHEN NOT FILTERED
 
                                     // Highlight if hovered port is either endpoint
-                                    if (hoveredPort == i || hoveredPort == destIndex) {
-                                        edgeColor = sf::Color(160, 32, 240, 255); // bright purple
+                                    /*
+                                    if (hoveredPort == i) { // hoveredPort == destIndex is removed to prevent highlughting of every thing
+                                        // edgeColor = sf::Color(160, 32, 240, 255); // bright purple
+                                        edgeColor = getCostColor(route->voyageCost);
+                                    }
+                                    */
+                                    if (hoveredPort == i) {
+                                        edgeColor = getCostColor(route->voyageCost);
+                                    }
+                                    else if (showOnlyActiveRoutes && route->shippingCompanyName != activeCompanyFilter) {
+                                        edgeColor = sf::Color(80, 80, 80, 50);  // very faded
                                     }
 
                                     // Highlight if part of the computed path
@@ -1609,7 +3024,7 @@ struct oceanRouteGraph {
                                     }
 
                                     float thickness = .5f; // default thin for non-highlighted
-                                    if (hoveredPort == i || hoveredPort == destIndex) thickness = 3.0f; // hovered edges thicker
+                                    if (hoveredPort == i) thickness = 3.0f; // hovered edges thicker // || hoveredPort == destIndex removed
                                     for (size_t h = 0; h + 1 < highlightedPath.size(); h++) {
                                         if ((highlightedPath[h] == i && highlightedPath[h + 1] == destIndex) ||
                                             (highlightedPath[h] == destIndex && highlightedPath[h + 1] == i)) {
@@ -1638,9 +3053,203 @@ struct oceanRouteGraph {
                                     window.draw(arrow);
                                 }
                             }
+
+                            // ←←←←← ADD SUBGRAPH FILTER RIGHT HERE →→→→→
+                            bool edgeVisible = true;
+                            if (showOnlyActiveRoutes && !activeCompanyFilter.empty()) {
+                                if (route->shippingCompanyName != activeCompanyFilter) {
+                                    edgeVisible = false;
+                                }
+                            }
+                            if (!edgeVisible) {
+                                route = route->next;   // ← SKIP THIS EDGE
+                                continue;              // ← GO TO NEXT ROUTE
+                            }
+                            // ←←←←← END FILTER →→→→→
+
+                            sf::Vector2f p2 = graphPorts[destIndex]->position;
+                            if (p1.x > 0 && p1.y > 0 && p2.x > 0 && p2.y > 0) {
+                                // ... your entire drawing code stays 100% unchanged ...
+                                sf::Color edgeColor(120, 30, 30, 180);
+                                // ... hover, path highlight, thickness, line, arrow ...
+                            }
+
+                            route = route->next;
+
+                          
+                        }
+                        
+                        
+
+                        // === DOCKING QUEUE SIMULATION ===
+                        long long currentSimTime = 100000;  // Replace with real time later
+
+                        // Finish docked ships
+                        while (graphPorts[i]->currentDocked < graphPorts[i]->maxDocks &&
+                            graphPorts[i]->dockingQueue.size() > 0 &&
+                            currentSimTime >= graphPorts[i]->dockingQueue[0].serviceEndTime) {
+                            // Remove first ship
+                            for (int j = 0; j < graphPorts[i]->dockingQueue.size() - 1; j++) {
+                                graphPorts[i]->dockingQueue[j] = graphPorts[i]->dockingQueue[j + 1];
+                            }
+                            graphPorts[i]->dockingQueue.sz--;
+                            graphPorts[i]->currentDocked--;
+                        }
+
+                        // Dock new ships
+                        while (graphPorts[i]->currentDocked < graphPorts[i]->maxDocks &&
+                            graphPorts[i]->dockingQueue.size() > 0 &&
+                            currentSimTime >= graphPorts[i]->dockingQueue[0].arrivalTime) {
+                            graphPorts[i]->currentDocked++;
+                            // First ship is now docked — just leave it in queue[0]
+                        }
+
+
+                        if (graphPorts[i]->dockingQueue.size() > 0) {
+                            sf::Vector2f basePos = graphPorts[i]->position + sf::Vector2f(30, -50);
+
+                            for (int q = 0; q < graphPorts[i]->dockingQueue.size(); q++) {
+                                // Draw waiting ship
+                                sf::CircleShape ship(7);
+                                ship.setPosition(basePos + sf::Vector2f(q * 20, 0));
+                                ship.setFillColor(sf::Color(255, 200, 100));
+                                ship.setOutlineThickness(2);
+                                ship.setOutlineColor(sf::Color::White);
+                                window.draw(ship);
+
+                                // Draw dashed line between ships
+                                if (q > 0) {
+                                    sf::Vertex dash[] = {
+                                        sf::Vertex(basePos + sf::Vector2f((q - 1) * 20 + 7, 3), sf::Color::Yellow),
+                                        sf::Vertex(basePos + sf::Vector2f(q * 20 + 7, 3), sf::Color::Yellow)
+                                    };
+                                    window.draw(dash, 2, sf::PrimitiveType::Lines);
+                                }
+                            }
+
+                            // Optional: Show queue size
+                            sf::Text queueText(font, to_string(graphPorts[i]->dockingQueue.size()), 12);
+                            queueText.setFillColor(sf::Color::Yellow);
+                            queueText.setPosition(basePos + sf::Vector2f(-10, -20));
+                            window.draw(queueText);
+                        }
+                        
+                        
+
+
+                        if (simulationMode) {
+                            // === ANIMATED DOCKING QUEUE — REPLACE YOUR CURRENT ONE WITH THIS ===
+                            if (graphPorts[i]->dockingQueue.size() > 0 || graphPorts[i]->currentDocked > 0) {
+                                sf::Vector2f portPos = graphPorts[i]->position;
+                                sf::Vector2f queueStart = portPos + sf::Vector2f(40, -60);
+                                float spacing = 22.0f;
+
+                                int waiting = graphPorts[i]->dockingQueue.size();
+                                int docked = graphPorts[i]->currentDocked;
+                                int totalInPort = waiting + docked;
+
+                                // Draw docked ships (inside the port — green)
+                                for (int d = 0; d < docked; d++) {
+                                    sf::CircleShape dockedShip(10);
+                                    dockedShip.setPosition(portPos + sf::Vector2f(-20 + d * 20, 20));
+                                    dockedShip.setFillColor(sf::Color(100, 255, 100));
+                                    dockedShip.setOutlineThickness(3);
+                                    dockedShip.setOutlineColor(sf::Color::White);
+                                    window.draw(dockedShip);
+                                }
+
+
+                                // Draw waiting ships (yellow, moving toward dock)
+                                for (int q = 0; q < waiting; q++) {
+                                    float progress = 1.0f - (float)q / (float)(totalInPort > 0 ? totalInPort : 1);
+                                    float animX = queueStart.x + q * spacing - progress * 60;
+
+                                    sf::CircleShape ship(8);
+                                    ship.setPosition(sf::Vector2f(animX, queueStart.y));
+                                    ship.setFillColor(sf::Color(255, 200, 100));
+                                    ship.setOutlineThickness(2);
+                                    ship.setOutlineColor(sf::Color::White);
+                                    window.draw(ship);
+
+                                    if (q > 0) {
+                                        sf::Vertex dash[] = {
+                                            sf::Vertex(sf::Vector2f(animX + 8, queueStart.y + 4), sf::Color::Yellow),
+                                            sf::Vertex(sf::Vector2f(animX + spacing - 8, queueStart.y + 4), sf::Color::Yellow)
+                                        };
+                                        window.draw(dash, 2, sf::PrimitiveType::Lines);
+                                    }
+
+                                    // Arrow from last waiting ship to dock
+                                    if (q == waiting - 1 && docked > 0) {
+                                        sf::Vector2f from = sf::Vector2f(animX + 8, queueStart.y);
+                                        sf::Vector2f to = portPos + sf::Vector2f(-20, 20);
+                                        sf::Vertex arrow[] = {
+                                            sf::Vertex(from, sf::Color::Yellow),
+                                            sf::Vertex(to, sf::Color::Yellow)
+                                        };
+                                        window.draw(arrow, 2, sf::PrimitiveType::Lines);
+                                    }
+                                }
+
+
+                                // Status text
+                                sf::Text status(font, "Queue: " + to_string(waiting) + " | Docked: " + to_string(docked), 12);
+                                status.setFillColor(sf::Color::Yellow);
+                                status.setPosition(queueStart + sf::Vector2f(-20, -30));
+                                window.draw(status);
+                            }
+                            // === END ANIMATED QUEUE ===
+
+                        }
+
+                        
+                    }
+                    
+
+                    // ===================== INSERT INFOBOX HERE =====================
+
+                    // Draw info panel when hovering over a port
+                    if (hoveredPort != -1) {
+                        sf::RectangleShape infoBox(sf::Vector2f(350.0f, 220.0f));
+                        infoBox.setPosition(sf::Vector2f(30.0f, static_cast<float>(windowHeight - 250)));
+                        infoBox.setFillColor(sf::Color(20, 25, 40, 240));
+                        infoBox.setOutlineThickness(2.0f);
+                        infoBox.setOutlineColor(sf::Color(80, 150, 255));
+                        window.draw(infoBox);
+
+                        sf::Text infoTitle(font, graphPorts[hoveredPort]->portName, 20);
+                        infoTitle.setFillColor(sf::Color(120, 200, 255));
+                        infoTitle.setStyle(sf::Text::Bold);
+                        infoTitle.setPosition(sf::Vector2f(40.0f, static_cast<float>(windowHeight - 240)));
+                        window.draw(infoTitle);
+
+                        sf::Text chargeText(font, "Daily Charge: $" + to_string(graphPorts[hoveredPort]->dailyPortCharge), 14);
+                        chargeText.setFillColor(sf::Color(200, 210, 230));
+                        chargeText.setPosition(sf::Vector2f(40.0f, static_cast<float>(windowHeight - 210)));
+                        window.draw(chargeText);
+
+                        sf::Text routeHeader(font, "Outgoing Routes:", 16);
+                        routeHeader.setFillColor(sf::Color(180, 200, 255));
+                        routeHeader.setStyle(sf::Text::Bold);
+                        routeHeader.setPosition(sf::Vector2f(40.0f, static_cast<float>(windowHeight - 180)));
+                        window.draw(routeHeader);
+
+                        int routeCount = 0;
+                        graphEdgeRoute* route = graphPorts[hoveredPort]->routeHead;
+                        while (route != nullptr && routeCount < 4) {
+                            sf::Text routeText(font, "-> " + route->destinationName +
+                                " ($" + to_string(route->voyageCost) + ")", 12);
+                            routeText.setFillColor(sf::Color(180, 190, 210));
+                            routeText.setPosition(sf::Vector2f(50.0f, static_cast<float>(windowHeight - 155 + routeCount * 22)));
+                            window.draw(routeText);
+
+                            routeCount++;
                             route = route->next;
                         }
                     }
+                    // ===================== END INFOBOX INSERT =====================
+
+
                     // Draw all ports (nodes) with support for exploration states and selection highlighting
                     for (int i = 0; i < currentSize; i++) {
                         if (graphPorts[i] == nullptr) continue;
@@ -1659,13 +3268,16 @@ struct oceanRouteGraph {
                         if (isOrigin) {
                             glowRadius = 50.0f;
                             glowColor = sf::Color(100, 255, 150, 120);
-                        } else if (isDestination) {
+                        }
+                        else if (isDestination) {
                             glowRadius = 50.0f;
                             glowColor = sf::Color(255, 180, 100, 120);
-                        } else if (isHovered) {
+                        }
+                        else if (isHovered) {
                             glowRadius = 35.0f;
                             glowColor = sf::Color(150, 100, 255, 100);
-                        } else if (isHighlightedNode) {
+                        }
+                        else if (isHighlightedNode) {
                             glowRadius = 30.0f;
                             glowColor = sf::Color(80, 255, 100, 80);
                         }
@@ -1681,136 +3293,362 @@ struct oceanRouteGraph {
                             node.setFillColor(sf::Color(100, 255, 150));
                             node.setOutlineThickness(3.0f);
                             node.setOutlineColor(sf::Color(150, 255, 180));
-                        } else if (isDestination) {
+                        }
+                        else if (isDestination) {
                             node.setFillColor(sf::Color(255, 180, 100));
                             node.setOutlineThickness(3.0f);
                             node.setOutlineColor(sf::Color(255, 220, 150));
-                        } else if (isHovered) {
+                        }
+                        else if (isHovered) {
                             node.setFillColor(sf::Color(150, 100, 255));
                             node.setOutlineThickness(3.0f);
                             node.setOutlineColor(sf::Color(200, 150, 255));
-                        } else if (isHighlightedNode) {
+                        }
+                        else if (isHighlightedNode) {
                             node.setFillColor(sf::Color(80, 255, 100));
                             node.setOutlineThickness(3.0f);
                             node.setOutlineColor(sf::Color(120, 255, 150));
-                        } else {
+                        }
+                        else {
                             node.setFillColor(sf::Color(60, 120, 200));
                             node.setOutlineThickness(2.0f);
                             node.setOutlineColor(sf::Color(100, 160, 240));
                         }
                         window.draw(node);
-                    
+
 
                         // Port name label with indicator for selected ports
-                    string portLabel = graphPorts[i]->portName;
-                    if (isOrigin) portLabel += " [O]";
-                    if (isDestination) portLabel += " [D]";
+                        string portLabel = graphPorts[i]->portName;
+                        if (isOrigin) portLabel += " [O]";
+                        if (isDestination) portLabel += " [D]";
 
-                    sf::Text portName(font, portLabel, 14);
+                        sf::Text portName(font, portLabel, 14);
 
-                    // Set colors and outline
-                    portName.setFillColor(sf::Color(220, 230, 255));
-                    portName.setOutlineColor(sf::Color::Black);
-                    portName.setOutlineThickness(2.f);
-                    portName.setStyle(sf::Text::Bold);
+                        // Set colors and outline
+                        portName.setFillColor(sf::Color(220, 230, 255));
+                        portName.setOutlineColor(sf::Color::Black);
+                        portName.setOutlineThickness(2.f);
+                        portName.setStyle(sf::Text::Bold);
 
-                    // ABOVE ports
-                    const char* specialPortsAbove[] = { "Osaka", "Montreal", "AbuDhabi", "Stockholm", "London" };
+                        // ABOVE ports
+                        const char* specialPortsAbove[] = { "Osaka", "Montreal", "AbuDhabi", "Stockholm", "London" };
 
-                    // LEFT ports
-                    const char* specialPortsLeft[]  = { "Oslo", "Doha", "Marseille", "Dublin" };
+                        // LEFT ports
+                        const char* specialPortsLeft[] = { "Oslo", "Doha", "Marseille", "Dublin" };
 
-                    // RIGHT ports
-                    const char* specialPortsRight[] = { "Copenhagen" };
+                        // RIGHT ports
+                        const char* specialPortsRight[] = { "Copenhagen" };
 
-                    bool drawAbove = false;
-                    bool drawLeft  = false;
-                    bool drawRight = false;
+                        bool drawAbove = false;
+                        bool drawLeft = false;
+                        bool drawRight = false;
 
-                    // Check ABOVE list
-                    for (int sp = 0; sp < 5; sp++) {
-                        if (portLabel.find(specialPortsAbove[sp]) != std::string::npos) {
-                            drawAbove = true;
-                            break;
+                        // Check ABOVE list
+                        for (int sp = 0; sp < 5; sp++) {
+                            if (portLabel.find(specialPortsAbove[sp]) != std::string::npos) {
+                                drawAbove = true;
+                                break;
+                            }
                         }
-                    }
 
-                    // Check LEFT list  (3 items now)
-                    for (int sp = 0; sp < 4; sp++) {
-                        if (portLabel.find(specialPortsLeft[sp]) != std::string::npos) {
-                            drawLeft = true;
-                            break;
+                        // Check LEFT list  (3 items now)
+                        for (int sp = 0; sp < 4; sp++) {
+                            if (portLabel.find(specialPortsLeft[sp]) != std::string::npos) {
+                                drawLeft = true;
+                                break;
+                            }
                         }
-                    }
 
-                    // Check RIGHT list
-                    for (int sp = 0; sp < 1; sp++) {
-                        if (portLabel.find(specialPortsRight[sp]) != std::string::npos) {
-                            drawRight = true;
-                            break;
+                        // Check RIGHT list
+                        for (int sp = 0; sp < 1; sp++) {
+                            if (portLabel.find(specialPortsRight[sp]) != std::string::npos) {
+                                drawRight = true;
+                                break;
+                            }
                         }
-                    }
 
-                    // Text size
-                    sf::FloatRect textBounds = portName.getLocalBounds();
-                    float nodeRadiusForLabel = 6.0f;
+                        // Text size
+                        sf::FloatRect textBounds = portName.getLocalBounds();
+                        float nodeRadiusForLabel = 6.0f;
 
-                    float textX, textY;
+                        float textX, textY;
 
-                    if (drawLeft) {
-                        //---------------------------------------
-                        //        LEFT OF NODE (same Y level)
-                        //---------------------------------------
-                        textX = graphPorts[i]->position.x - textBounds.size.x - 14.f;
-                        textY = graphPorts[i]->position.y - (textBounds.size.y / 2.f) - 6.f;
+                        if (drawLeft) {
+                            //---------------------------------------
+                            //        LEFT OF NODE (same Y level)
+                            //---------------------------------------
+                            textX = graphPorts[i]->position.x - textBounds.size.x - 14.f;
+                            textY = graphPorts[i]->position.y - (textBounds.size.y / 2.f) - 6.f;
 
-                    } else if (drawRight) {
-                        //---------------------------------------
-                        //        RIGHT OF NODE (same Y level)
-                        //---------------------------------------
-                        textX = graphPorts[i]->position.x + 14.f;   // mirror of left spacing
-                        textY = graphPorts[i]->position.y - (textBounds.size.y / 2.f) - 6.f;
+                        }
+                        else if (drawRight) {
+                            //---------------------------------------
+                            //        RIGHT OF NODE (same Y level)
+                            //---------------------------------------
+                            textX = graphPorts[i]->position.x + 14.f;   // mirror of left spacing
+                            textY = graphPorts[i]->position.y - (textBounds.size.y / 2.f) - 6.f;
 
-                    } else if (drawAbove) {
-                        //---------------------------------------
-                        //               ABOVE NODE
-                        //---------------------------------------
-                        textX = graphPorts[i]->position.x - (textBounds.size.x / 2.f) - 4.f;
-                        textY = graphPorts[i]->position.y
+                        }
+                        else if (drawAbove) {
+                            //---------------------------------------
+                            //               ABOVE NODE
+                            //---------------------------------------
+                            textX = graphPorts[i]->position.x - (textBounds.size.x / 2.f) - 4.f;
+                            textY = graphPorts[i]->position.y
                                 - nodeRadiusForLabel
                                 - textBounds.size.y
                                 - 14.f;  // moved further up
 
-                    } else {
-                        //---------------------------------------
-                        //               BELOW NODE
-                        //---------------------------------------
-                        textX = graphPorts[i]->position.x - (textBounds.size.x / 2.f) - 2.f;
-                        textY = graphPorts[i]->position.y
+                        }
+                        else {
+                            //---------------------------------------
+                            //               BELOW NODE
+                            //---------------------------------------
+                            textX = graphPorts[i]->position.x - (textBounds.size.x / 2.f) - 2.f;
+                            textY = graphPorts[i]->position.y
                                 + nodeRadiusForLabel
                                 + 2.f;   // moved slightly upward
+                        }
+
+                        portName.setPosition(sf::Vector2f(textX, textY));
+
+                        // Draw
+                        window.draw(portName);
+
                     }
 
-                    portName.setPosition(sf::Vector2f(textX, textY));
+                    // Future: Right-side control panel for algorithm controls
+                    // Future: Top-right panel for pathfinding options and filters
+                    // Future: Animation progress bar at bottom
+                    // Future: Multi-leg journey visualization panel
 
-                    // Draw
-                    window.draw(portName);
+                    //window.display();
+                }
+                // === DRAW MULTI-LEG JOURNEY ===
+                // Draw multi-leg journey arrows
+                JourneyLeg* leg = currentJourney.head;
+                JourneyLeg* prev = nullptr;
+                while (leg) {
+                    if (prev) {
+                        sf::Vector2f p1 = graphPorts[prev->portIndex]->position;
+                        sf::Vector2f p2 = graphPorts[leg->portIndex]->position;
 
+                        // Main line
+                        sf::Vertex line[] = {
+                            sf::Vertex(p1, sf::Color::Cyan),
+                            sf::Vertex(p2, sf::Color::Cyan)
+                        };
+                        window.draw(line, 2, sf::PrimitiveType::Lines);
+
+                        // Arrowhead
+                        sf::Vector2f dir = p2 - p1;
+                        float len = sqrt(dir.x * dir.x + dir.y * dir.y);
+                        if (len > 20) {
+                            dir.x /= len;
+                            dir.y /= len;
+                            sf::Vector2f perp(-dir.y, dir.x);
+
+                            sf::Vector2f tip1 = p2 - sf::Vector2f(dir.x * 25 + perp.x * 10, dir.y * 25 + perp.y * 10);
+                            sf::Vector2f tip2 = p2 - sf::Vector2f(dir.x * 25 - perp.x * 10, dir.y * 25 - perp.y * 10);
+
+                            sf::Vertex arrow[] = {
+                                sf::Vertex(p2, sf::Color::Cyan),
+                                sf::Vertex(tip1, sf::Color::Cyan),
+                                sf::Vertex(p2, sf::Color::Cyan),
+                                sf::Vertex(tip2, sf::Color::Cyan)
+                            };
+                            window.draw(arrow, 4, sf::PrimitiveType::Lines);
+                        }
+                    }
+                    prev = leg;
+                    leg = leg->next;
+                }
+                // === END MULTI-LEG DRAWING ===
+
+
+                // === WHOOSH EFFECT — EPIC SWOOSH ACROSS PATH ===
+                if (showWhoosh && currentPath.found && currentPath.pathSize > 0) {
+                    float duration = 5.0f;  // 2 seconds
+                    whooshProgress = whooshClock.getElapsedTime().asSeconds() / duration;
+
+                    if (whooshProgress >= 1.0f) {
+                        showWhoosh = false;
+                    }
+                    else {
+                        // Calculate current position along path
+                        float t = whooshProgress * (currentPath.pathSize - 1);
+                        int segment = (int)t;
+                        float frac = t - segment;
+
+                        if (segment < currentPath.pathSize - 1) {
+                            sf::Vector2f p1 = graphPorts[currentPath.path[segment]]->position;
+                            sf::Vector2f p2 = graphPorts[currentPath.path[segment + 1]]->position;
+                            sf::Vector2f pos = p1 + (p2 - p1) * frac;
+
+                            // Draw glowing whoosh particle
+                            sf::CircleShape whoosh(20);
+                            whoosh.setPosition(pos - sf::Vector2f(20, 20));
+                            whoosh.setFillColor(sf::Color(100, 255, 255, 180));
+                            whoosh.setOutlineThickness(8);
+                            whoosh.setOutlineColor(sf::Color(0, 255, 255, 255));
+                            window.draw(whoosh);
+
+                            // Trail effect
+                            for (int trail = 1; trail <= 3; trail++) {
+                                float trailT = whooshProgress - trail * 1.15f;
+                                if (trailT < 0) break;
+
+                                float trailPos = trailT * (currentPath.pathSize - 1);
+                                int trailSeg = (int)trailPos;
+                                float trailFrac = trailPos - trailSeg;
+
+                                if (trailSeg < currentPath.pathSize - 1) {
+                                    sf::Vector2f t1 = graphPorts[currentPath.path[trailSeg]]->position;
+                                    sf::Vector2f t2 = graphPorts[currentPath.path[trailSeg + 1]]->position;
+                                    sf::Vector2f trailPos = t1 + (t2 - t1) * trailFrac;
+
+                                    sf::CircleShape trailDot(8 - trail * 0.5f);
+                                    trailDot.setPosition(trailPos - sf::Vector2f(trailDot.getRadius(), trailDot.getRadius()));
+                                    trailDot.setFillColor(sf::Color(0, 255, 255, (int)(255 * (1.0f - trail * 0.1f))));
+                                    window.draw(trailDot);
+                                }
+                            }
+                        }
+                    }
+                }
+                // === END WHOOSH ===
+
+                // === LEFT-SIDE CONSOLE PANEL ===
+                //static SimpleVector<string, 50> consoleLines;
+                static bool firstTime = true;
+
+                if (firstTime) {
+                    consoleLines.push_back("=== OCEAN ROUTE SYSTEM LOG ===");
+                    consoleLines.push_back("Ready. Click ports to select route.");
+                    firstTime = false;
                 }
 
-                // Future: Right-side control panel for algorithm controls
-                // Future: Top-right panel for pathfinding options and filters
-                // Future: Animation progress bar at bottom
-                // Future: Multi-leg journey visualization panel
+   
+                float panelHeight = 400.0f;
+                float panelY = (windowHeight - panelHeight) / 2.0f;
 
+                sf::RectangleShape consolePanel(sf::Vector2f(400.0f, panelHeight));
+                consolePanel.setPosition(sf::Vector2f(0.0f, panelY));
+                consolePanel.setFillColor(sf::Color(0, 0, 0, 200));
+                window.draw(consolePanel);
+
+                // Title
+                sf::Text titleText(font, "SYSTEM LOG", 20);
+                titleText.setFillColor(sf::Color::Cyan);
+                titleText.setStyle(sf::Text::Bold);
+                titleText.setPosition(sf::Vector2f(0.0f, panelY));  // ← FIXED
+                window.draw(titleText);
+
+                // ←←←←← ADD AUTO-CLEARING RIGHT HERE →→→→→
+                int maxLines = 16;  // how many lines fit in panel
+                if (consoleLines.size() > maxLines) {
+                    for (int i = 0; i < maxLines; i++) {
+                        consoleLines[i] = consoleLines[consoleLines.size() - maxLines + i];
+                    }
+                    consoleLines.sz = maxLines;
+                }
+                // ←←←←← END AUTO-CLEARING →→→→→
+
+                // Draw log lines
+                for (int i = 0; i < consoleLines.size(); i++) {
+                    sf::Text line(font, consoleLines[i], 14);
+                    line.setFillColor(i == consoleLines.size() - 1 ? sf::Color::Yellow : sf::Color(200, 200, 200));
+                    line.setPosition(sf::Vector2f(20.0f, panelY + 50.0f + i * 22.0f));
+                    window.draw(line);
+                }
+
+                /*
+                // === REAL-TIME PATHFINDING VISUALIZATION — WORKS 100% ===
+                if (currentPath.found && highlightedPath.size() > 0) {
+                    static int animIndex = 0;
+                    static sf::Clock animClock;
+
+                    if (animClock.getElapsedTime().asMilliseconds() > 80) {
+                        animIndex++;
+                        if (animIndex >= highlightedPath.size()) {
+                            animIndex = 0;  // loop
+                        }
+                        animClock.restart();
+                    }
+
+                    int currentNode = highlightedPath[animIndex];
+
+                    // Draw PULSING GREEN RING on current node
+                    float pulseSize = 20 + 10 * sin(animClock.getElapsedTime().asSeconds() * 8);
+                    sf::CircleShape pulse(pulseSize);
+                    pulse.setPosition(graphPorts[currentNode]->position - sf::Vector2f(pulseSize, pulseSize));
+                    pulse.setFillColor(sf::Color::Transparent);
+                    pulse.setOutlineThickness(6);
+                    pulse.setOutlineColor(sf::Color(100, 255, 100, 180));
+                    window.draw(pulse);
+
+                    // Draw bright core
+                    sf::CircleShape core(12);
+                    core.setPosition(graphPorts[currentNode]->position - sf::Vector2f(12, 12));
+                    core.setFillColor(sf::Color(100, 255, 100));
+                    window.draw(core);
+                }
+                */
+                // === BOTTOM-RIGHT COST LEGEND (ONLY WHEN SUBGRAPH ACTIVE) ===
+                if (showOnlyActiveRoutes) {
+                    float legendX = windowWidth - 300;
+                    float legendY = windowHeight - 200;
+
+                    // Background
+                    sf::RectangleShape legendBg(sf::Vector2f(280, 180));
+                    legendBg.setPosition(sf::Vector2f(legendX, legendY));
+                    legendBg.setFillColor(sf::Color(0, 0, 0, 220));
+                    window.draw(legendBg);
+
+                    // Title
+                    sf::Text legendTitle(font, "ROUTE COST LEGEND", 18);
+                    legendTitle.setFillColor(sf::Color::Cyan);
+                    legendTitle.setStyle(sf::Text::Bold);
+                    legendTitle.setPosition(sf::Vector2f(legendX + 10, legendY + 10));
+                    window.draw(legendTitle);
+
+                    // Legend items
+                    struct { int cost; string label; } items[] = {
+                        {10000, "< $15,000 - Low Cost"},
+                        {20000, "$15K - $25K - Medium"},
+                        {30000, "$25K - $35K - High"},
+                        {40000, "> $35,000 - Very High"}
+                    };
+
+                    for (int i = 0; i < 4; i++) {
+                        // Color box
+                        sf::RectangleShape box(sf::Vector2f(20, 20));
+                        box.setPosition(sf::Vector2f(legendX + 20, legendY + 50 + i * 30));
+                        box.setFillColor(getCostColor(items[i].cost));
+                        box.setOutlineThickness(2);
+                        box.setOutlineColor(sf::Color::White);
+                        window.draw(box);
+
+                        // Text
+                        sf::Text label(font, items[i].label, 14);
+                        label.setFillColor(sf::Color::White);
+                        label.setPosition(sf::Vector2f(legendX + 50, legendY + 50 + i * 30));
+                        window.draw(label);
+                    }
+
+                    // Current filter
+                    sf::Text filter(font, "FILTER: " + activeCompanyFilter, 14);
+                    filter.setFillColor(sf::Color::Yellow);
+                    filter.setPosition(sf::Vector2f(legendX + 10, legendY + 170));
+                    window.draw(filter);
+                }
                 window.display();
             }
         }
     }
-}
 };
 
-int main() 
+int main()
 {
     oceanRouteGraph obj;
     obj.createGraphFromFile("./Routes.txt", "./PortCharges.txt");
