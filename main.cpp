@@ -1,4 +1,4 @@
-﻿#include <cmath>
+#include <cmath>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -152,7 +152,7 @@ struct WaitingShip {
 // struct WaitingShip { ... }
 // struct WaitingShipGraph { ... }
 
-// REPLACE WITH THIS ONE — ONLY ONE STRUCT
+// REPLACE WITH THIS ONE â€” ONLY ONE STRUCT
 struct WaitingShip {
     string company;
     long long arrivalTime = 0;
@@ -174,8 +174,8 @@ struct graphVerticePort {
     float latitude; // optional
     float longitude; // optional
     bool hasCoordinates;
-    SimpleVector<WaitingShip, 32> dockingQueue;   // ← QUEUE OF WAITING SHIPS
-    int maxDocks = 3;                             // ← MAX DOCKING SLOTS
+    SimpleVector<WaitingShip, 32> dockingQueue;   // â† QUEUE OF WAITING SHIPS
+    int maxDocks = 3;                             // â† MAX DOCKING SLOTS
     int currentDocked = 0;
 
     graphVerticePort() {
@@ -395,7 +395,7 @@ struct oceanRouteGraph {
 
 
     /// QUEUEING LOGIC AND VARIABLES:
-    long long globalSimulationTime = 0;  // minutes since start — increases every frame
+    long long globalSimulationTime = 0;  // minutes since start â€” increases every frame
     /*
     struct WaitingShipGraph {
         string company;
@@ -413,7 +413,7 @@ struct oceanRouteGraph {
     // Each port has limited docks
     SimpleVector<int, 64> availableDocks;  // availableDocks[portIndex] = number of free docks
 
-    // GLOBAL CONSOLE LOG — WORKS EVERYWHERE
+    // GLOBAL CONSOLE LOG â€” WORKS EVERYWHERE
     SimpleVector<string, 50> consoleLines;
     bool consoleFirstTime = true; // static removed
     bool simulationMode = false;
@@ -538,12 +538,12 @@ struct oceanRouteGraph {
         */
     }
 
-        // ←←←←← YOUR MULTI-LEG CODE GOES HERE — 100% CORRECT →→→→→
+        // â†â†â†â†â† YOUR MULTI-LEG CODE GOES HERE â€” 100% CORRECT â†’â†’â†’â†’â†’
         
 
         MultiLegJourney currentJourney;
         bool buildingMultiLeg = false;
-        // ←←←←← END OF MULTI-LEG CODE →→→→→
+        // â†â†â†â†â† END OF MULTI-LEG CODE â†’â†’â†’â†’â†’
 
 
     // parse the string from get line ourselver
@@ -1073,14 +1073,14 @@ struct oceanRouteGraph {
                 while (route != nullptr) {
                     int v = getPortIndex(route->destinationName);
                     if (v == -1 || visited[v]) { route = route->next; continue; }
-                    // ←←←←← ADD THIS BLOCK HERE →→→→→
+                    // â†â†â†â†â† ADD THIS BLOCK HERE â†’â†’â†’â†’â†’
                     if (showOnlyActiveRoutes && !activeCompanyFilter.empty()) {
                         if (route->shippingCompanyName != activeCompanyFilter) {
                             route = route->next;
                             continue;
                         }
                     }
-                    // ←←←←← END BLOCK →→→→→
+                    // â†â†â†â†â† END BLOCK â†’â†’â†’â†’â†’
 
                     // Avoid ports
                     bool skip = false;
@@ -1111,21 +1111,21 @@ struct oceanRouteGraph {
                 }
             }
 
-            // PHASE 2: If no preferred route found → allow ANY company
+            // PHASE 2: If no preferred route found â†’ allow ANY company
             if (!usedPreferred || !preferredCompany.empty()) {
                 route = graphPorts[u]->routeHead;
                 while (route != nullptr) {
                     int v = getPortIndex(route->destinationName);
                     if (v == -1 || visited[v]) { route = route->next; continue; }
 
-                    // ←←←←← GLOBAL COMPANY FILTER — MUST BE IN BOTH PHASES →→→→→
+                    // â†â†â†â†â† GLOBAL COMPANY FILTER â€” MUST BE IN BOTH PHASES â†’â†’â†’â†’â†’
                     if (showOnlyActiveRoutes && !activeCompanyFilter.empty()) {
                         if (route->shippingCompanyName != activeCompanyFilter) {
                             route = route->next;
                             continue;
                         }
                     }
-                    // ←←←←← END FILTER →→→→→
+                    // â†â†â†â†â† END FILTER â†’â†’â†’â†’â†’
 
                     bool skip = false;
                     for (int i = 0; i < avoidPorts.size(); i++) {
@@ -1205,14 +1205,14 @@ struct oceanRouteGraph {
                     if (v == -1 || visited[v]) { route = route->next; continue; }
 
                     cout << "From function: " <<  activeCompanyFilter << endl;
-                    // ←←←←← ADD THIS BLOCK HERE →→→→→
+                    // â†â†â†â†â† ADD THIS BLOCK HERE â†’â†’â†’â†’â†’
                     if (showOnlyActiveRoutes && !activeCompanyFilter.empty()) {
                         if (route->shippingCompanyName != activeCompanyFilter) {
                             route = route->next;
                             continue;
                         }
                     }
-                    // ←←←←← END BLOCK →→→→→
+                    // â†â†â†â†â† END BLOCK â†’â†’â†’â†’â†’
 
                     bool skip = false;
                     for (int i = 0; i < avoidPorts.size(); i++) {
@@ -1233,7 +1233,7 @@ struct oceanRouteGraph {
                         adjustedDep += 24LL * 60LL;
                     }
 
-                    // If we STILL miss the ship → skip
+                    // If we STILL miss the ship â†’ skip
                     if (arr > adjustedDep) {
                         route = route->next;
                         continue;
@@ -1281,14 +1281,14 @@ struct oceanRouteGraph {
                     int v = getPortIndex(route->destinationName);
                     if (v == -1 || visited[v]) { route = route->next; continue; }
 
-                    // ←←←←← GLOBAL COMPANY FILTER — MUST BE IN BOTH PHASES →→→→→
+                    // â†â†â†â†â† GLOBAL COMPANY FILTER â€” MUST BE IN BOTH PHASES â†’â†’â†’â†’â†’
                     if (showOnlyActiveRoutes && !activeCompanyFilter.empty()) {
                         if (route->shippingCompanyName != activeCompanyFilter) {
                             route = route->next;
                             continue;
                         }
                     }
-                    // ←←←←← END FILTER →→→→→
+                    // â†â†â†â†â† END FILTER â†’â†’â†’â†’â†’
 
                     bool skip = false;
                     for (int i = 0; i < avoidPorts.size(); i++) {
@@ -1366,14 +1366,14 @@ struct oceanRouteGraph {
                 while (route != nullptr) {
                     int v = getPortIndex(route->destinationName);
                     if (v == -1 || visited[v]) { route = route->next; continue; }
-                    // ←←←←← ADD THIS BLOCK HERE →→→→→
+                    // â†â†â†â†â† ADD THIS BLOCK HERE â†’â†’â†’â†’â†’
                     if (showOnlyActiveRoutes && !activeCompanyFilter.empty()) {
                         if (route->shippingCompanyName != activeCompanyFilter) {
                             route = route->next;
                             continue;
                         }
                     }
-                    // ←←←←← END BLOCK →→→→→
+                    // â†â†â†â†â† END BLOCK â†’â†’â†’â†’â†’
 
                     bool skip = false;
                     for (int i = 0; i < avoidPorts.size(); i++) {
@@ -1413,7 +1413,7 @@ struct oceanRouteGraph {
                     if (adjustedDep < time)
                         adjustedDep += 24LL * 60LL;
 
-                    // If even after adjusting, you still cannot catch it → skip
+                    // If even after adjusting, you still cannot catch it â†’ skip
                     if (time > adjustedDep) {
                         route = route->next;
                         continue;
@@ -1461,14 +1461,14 @@ struct oceanRouteGraph {
                     int v = getPortIndex(route->destinationName);
                     if (v == -1 || visited[v]) { route = route->next; continue; }
 
-                    // ←←←←← GLOBAL COMPANY FILTER — MUST BE IN BOTH PHASES →→→→→
+                    // â†â†â†â†â† GLOBAL COMPANY FILTER â€” MUST BE IN BOTH PHASES â†’â†’â†’â†’â†’
                     if (showOnlyActiveRoutes && !activeCompanyFilter.empty()) {
                         if (route->shippingCompanyName != activeCompanyFilter) {
                             route = route->next;
                             continue;
                         }
                     }
-                    // ←←←←← END FILTER →→→→→
+                    // â†â†â†â†â† END FILTER â†’â†’â†’â†’â†’
 
                     bool skip = false;
                     for (int i = 0; i < avoidPorts.size(); i++) {
@@ -1556,14 +1556,14 @@ struct oceanRouteGraph {
                     int v = getPortIndex(route->destinationName);
                     if (v == -1 || visited[v]) { route = route->next; continue; }
 
-                    // ←←←←← ADD THIS BLOCK HERE →→→→→
+                    // â†â†â†â†â† ADD THIS BLOCK HERE â†’â†’â†’â†’â†’
                     if (showOnlyActiveRoutes && !activeCompanyFilter.empty()) {
                         if (route->shippingCompanyName != activeCompanyFilter) {
                             route = route->next;
                             continue;
                         }
                     }
-                    // ←←←←← END BLOCK →→→→→
+                    // â†â†â†â†â† END BLOCK â†’â†’â†’â†’â†’
 
                     bool skip = false;
                     for (int i = 0; i < avoidPorts.size(); i++) {
@@ -1604,7 +1604,7 @@ struct oceanRouteGraph {
                         adjustedDep += 24LL * 60LL;   // catch tomorrow's ship
                     }
 
-                    // If even after adjusting you still miss it → skip
+                    // If even after adjusting you still miss it â†’ skip
                     if (arrivalAtU > adjustedDep) {
                         route = route->next;
                         continue;
@@ -1635,7 +1635,7 @@ struct oceanRouteGraph {
                         }
                     }
 
-                    // --- RELAX EDGE: If preferred company → add small bias ---
+                    // --- RELAX EDGE: If preferred company â†’ add small bias ---
                     long long candidateCost = adjustedArr;
                     if (route->shippingCompanyName == preferredCompany) {
                         candidateCost -= 5; // small priority bias
@@ -1656,14 +1656,14 @@ struct oceanRouteGraph {
                 while (route != nullptr) {
                     int v = getPortIndex(route->destinationName);
                     if (v == -1 || visited[v]) { route = route->next; continue; }
-                    // ←←←←← GLOBAL COMPANY FILTER — MUST BE IN BOTH PHASES →→→→→
+                    // â†â†â†â†â† GLOBAL COMPANY FILTER â€” MUST BE IN BOTH PHASES â†’â†’â†’â†’â†’
                     if (showOnlyActiveRoutes && !activeCompanyFilter.empty()) {
                         if (route->shippingCompanyName != activeCompanyFilter) {
                             route = route->next;
                             continue;
                         }
                     }
-                    // ←←←←← END FILTER →→→→→
+                    // â†â†â†â†â† END FILTER â†’â†’â†’â†’â†’
 
                     bool skip = false;
                     for (int i = 0; i < avoidPorts.size(); i++) {
@@ -1696,7 +1696,7 @@ struct oceanRouteGraph {
         return result;
     }
 
-    // FASTEST MULTI-LEG ROUTE — PURE LINKED LIST (NO VECTOR!)
+    // FASTEST MULTI-LEG ROUTE â€” PURE LINKED LIST (NO VECTOR!)
     /*
     PathResult findFastestMultiLeg(const MultiLegJourney& journey, bool useAStar = true) {
         PathResult finalResult;
@@ -1727,7 +1727,7 @@ struct oceanRouteGraph {
                 return finalResult;
             }
 
-            // Append segment path (skip first node — already in previous leg)
+            // Append segment path (skip first node â€” already in previous leg)
             for (int i = 1; i < segment.pathSize; i++) {
                 finalResult.path[finalResult.pathSize++] = segment.path[i];
             }
@@ -1769,7 +1769,7 @@ struct oceanRouteGraph {
                 return finalResult;
             }
 
-            // ←←←←← SAFE COPY →→→→→
+            // â†â†â†â†â† SAFE COPY â†’â†’â†’â†’â†’
             for (int j = 1; j < segment.pathSize; j++) {
                 if (finalResult.pathSize < 510) {  // leave room for null terminator if needed
                     //finalResult.
@@ -1800,7 +1800,7 @@ struct oceanRouteGraph {
             return result;
         }
 
-        // Temporary buffer — safe zone
+        // Temporary buffer â€” safe zone
         int tempPath[1024];
         int tempSize = 0;
 
@@ -1821,10 +1821,10 @@ struct oceanRouteGraph {
                 break;
             }
 
-            // Append segment (skip first node — already added)
+            // Append segment (skip first node â€” already added)
             for (int j = 1; j < segment.pathSize; j++) {
                 if (tempSize >= 1020) {  // safety limit
-                    addLog("Warning: Multi-leg path too long — truncated!");
+                    addLog("Warning: Multi-leg path too long â€” truncated!");
                     result.found = true;
                     goto allocate_final;
                 }
@@ -1868,7 +1868,7 @@ struct oceanRouteGraph {
             cout << "Total Cost: $" << currentPath.totalCost << endl;
 
             /*
-            // ←←←←← ADD THE QUEUE CODE RIGHT HERE — AFTER THE COUT LINES →→→→→
+            // â†â†â†â†â† ADD THE QUEUE CODE RIGHT HERE â€” AFTER THE COUT LINES â†’â†’â†’â†’â†’
             
             for (int i = 0; i < currentPath.pathSize - 1; i++) {
                 int portIdx = currentPath.path[i];
@@ -1880,9 +1880,9 @@ struct oceanRouteGraph {
 
                 graphPorts[portIdx]->dockingQueue.push_back(ship);
             }
-            // ←←←←← END OF QUEUE CODE →→→→→
+            // â†â†â†â†â† END OF QUEUE CODE â†’â†’â†’â†’â†’
             */
-            // ←←←←← ADD SHIPS TO QUEUE — RIGHT HERE →→→→→
+            // â†â†â†â†â† ADD SHIPS TO QUEUE â€” RIGHT HERE â†’â†’â†’â†’â†’
             for (int i = 0; i < currentPath.pathSize - 1; i++) {
                 int portIdx = currentPath.path[i];
 
@@ -1894,7 +1894,7 @@ struct oceanRouteGraph {
                 graphPorts[portIdx]->dockingQueue.push_back(ship);
                 cout << "ADDED SHIP to " << graphPorts[portIdx]->portName << endl;
             }
-            // ←←←←← END →→→→→
+            // â†â†â†â†â† END â†’â†’â†’â†’â†’
 
             // AFTER your queue-adding loop
             cout << "=== DOCKING QUEUE DEBUG ===" << endl;
@@ -1954,7 +1954,7 @@ struct oceanRouteGraph {
             cout << "To: " << graphPorts[destinationIndex]->portName << endl;
 
             /*
-            // ←←←←← ADD THE EXACT SAME QUEUE CODE HERE →→→→→
+            // â†â†â†â†â† ADD THE EXACT SAME QUEUE CODE HERE â†’â†’â†’â†’â†’
             for (int i = 0; i < currentPath.pathSize - 1; i++) {
                 int portIdx = currentPath.path[i];
 
@@ -1965,7 +1965,7 @@ struct oceanRouteGraph {
 
                 graphPorts[portIdx]->dockingQueue.push_back(ship);
             }
-            // ←←←←← END →→→→→
+            // â†â†â†â†â† END â†’â†’â†’â†’â†’
             */
           
             // AFTER your queue-adding loop
@@ -2086,7 +2086,7 @@ struct oceanRouteGraph {
         
         if (action == "Find Cheapest Route") {
             if (selectedOrigin != -1 && selectedDestination != -1) {
-                highlightedPath.clear();  // ← THIS FIXES THE HIGHLIGHT BUG
+                highlightedPath.clear();  // â† THIS FIXES THE HIGHLIGHT BUG
                 string companyToUse = showOnlyActiveRoutes ? activeCompanyFilter : selectedCompany;
                 // Always use COST-BASED algorithms for "Cheapest"
                 if (useAStar)
@@ -2114,7 +2114,7 @@ struct oceanRouteGraph {
         }
         else if (action == "Find Fastest Route") {
             if (selectedOrigin != -1 && selectedDestination != -1) {
-                highlightedPath.clear();  // ← THIS FIXES THE HIGHLIGHT BUG
+                highlightedPath.clear();  // â† THIS FIXES THE HIGHLIGHT BUG
                 string companyToUse = showOnlyActiveRoutes ? activeCompanyFilter : selectedCompany;
                 // Always use TIME-BASED algorithms for "Fastest"
                 if (useAStar)
@@ -2151,9 +2151,9 @@ struct oceanRouteGraph {
             buildingMultiLeg = !buildingMultiLeg;
 
             if (buildingMultiLeg) {
-                cout << "Multi-leg mode ON — click ports in order" << endl;
-                // DO NOT CLEAR — keep previous journey!
-                currentJourney.clear(); // ← DELETE THIS LINE
+                cout << "Multi-leg mode ON â€” click ports in order" << endl;
+                // DO NOT CLEAR â€” keep previous journey!
+                currentJourney.clear(); // â† DELETE THIS LINE
                 if (currentJourney.legCount == 0) {
                     addLog("Started new multi-leg journey");
                 }
@@ -2165,21 +2165,21 @@ struct oceanRouteGraph {
         }
         else if (action == "Filter by Company") {
             if (selectedCompany.empty()) {
-                // If no company typed → turn OFF filter
+                // If no company typed â†’ turn OFF filter
                 showOnlyActiveRoutes = false;
                 activeCompanyFilter = "";
-                addLog("Company filter OFF — showing all routes");
+                addLog("Company filter OFF â€” showing all routes");
             }
             else {
                 // Turn ON filter with selected company
                 activeCompanyFilter = selectedCompany;
                 showOnlyActiveRoutes = true;
-                // ← THIS ACTIVATES THE FILTER
+                // â† THIS ACTIVATES THE FILTER
                 addLog("Company filter ON: " + activeCompanyFilter);
             }
 
-            generateSubgraph();  // ← REBUILD VISIBLE PORTS/EDGES
-            highlightedPath.clear();  // ← clear old path
+            generateSubgraph();  // â† REBUILD VISIBLE PORTS/EDGES
+            highlightedPath.clear();  // â† clear old path
             showQueryPanel = false;
         }
         else if (action == "Generate Subgraph") {
@@ -2225,8 +2225,8 @@ struct oceanRouteGraph {
                 int v = getPortIndex(r->destinationName);
                 if (v != -1 && graphPorts[v]) {
                     sf::Vertex line[] = {
-                        sf::Vertex(graphPorts[i]->position, sf::Color(80,80,80,80)),
-                        sf::Vertex(graphPorts[v]->position, sf::Color(80,80,80,80))
+                        { sf::Vector2f(graphPorts[i]->position), sf::Color(80,80,80,80) },
+                        { sf::Vector2f(graphPorts[v]->position), sf::Color(80,80,80,80) }
                     };
                     window.draw(line, 2, sf::PrimitiveType::Lines);
                 }
@@ -2364,7 +2364,7 @@ struct oceanRouteGraph {
                                     cout << "Algorithm switched to: "
                                         << (useAStar ? "A*" : "Dijkstra") << endl;
 
-                                    highlightedPath.clear();   // ⭐ NOW WE CAN CLEAR IT HERE
+                                    highlightedPath.clear();   // â­ NOW WE CAN CLEAR IT HERE
                                     continue;
                                 } 
 
@@ -2375,7 +2375,7 @@ struct oceanRouteGraph {
                                         cout << "Multi-leg mode OFF" << endl;
                                     }
                                     else {
-                                        cout << "Multi-leg mode ON — click ports in order" << endl;
+                                        cout << "Multi-leg mode ON â€” click ports in order" << endl;
                                     }
                                     currentJourney = MultiLegJourney();  // clear old journey
                                     highlightedPath.clear();             // optional: clear old path
@@ -2405,11 +2405,11 @@ struct oceanRouteGraph {
 
                                         globalSimulationTime += 100000;  // advance time
 
-                                        // ←←←← START WHOOSH EFFECT →→→→
+                                        // â†â†â†â† START WHOOSH EFFECT â†’â†’â†’â†’
                                         showWhoosh = true;
                                         whooshProgress = 0.0f;
                                         whooshClock.restart();
-                                        // ←←←← END →→→→
+                                        // â†â†â†â† END â†’â†’â†’â†’
                                     }
 
                                     //simulationMode = false;
@@ -2424,7 +2424,7 @@ struct oceanRouteGraph {
 
                                     addLog("SIMULATING MULTI-LEG JOURNEY...");
 
-                                    // ←←←←USE MULTI-LEG FASTEST PATH (A* OR DIJKSTRA) →→→→→
+                                    // â†â†â†â†USE MULTI-LEG FASTEST PATH (A* OR DIJKSTRA) â†’â†’â†’â†’â†’
                                     
                                     currentPath = findFastestMultiLeg(currentJourney, useAStar);
 
@@ -2433,14 +2433,14 @@ struct oceanRouteGraph {
                                         return;
                                     }
 
-                                    // ←←←←← COPY TO HIGHLIGHTED PATH FOR DRAWING →→→→→
+                                    // â†â†â†â†â† COPY TO HIGHLIGHTED PATH FOR DRAWING â†’â†’â†’â†’â†’
                                     highlightedPath.clear();
                                     for (int i = 0; i < currentPath.pathSize; i++) {
                                         highlightedPath.push_back(currentPath.path[i]);
                                     }
                                     
 
-                                    // ←←←←← ADD SHIPS TO EVERY PORT ON THE FINAL ROUTE →→→→→
+                                    // â†â†â†â†â† ADD SHIPS TO EVERY PORT ON THE FINAL ROUTE â†’â†’â†’â†’â†’
                                     for (int i = 0; i < currentPath.pathSize - 1; i++) {
                                         int portIdx = currentPath.path[i];
 
@@ -2453,13 +2453,13 @@ struct oceanRouteGraph {
                                         addLog("Ship arrived at " + graphPorts[portIdx]->portName);
                                     }
 
-                                    // ←←←←← ADVANCE TIME + START WHOOSH →→→→→
+                                    // â†â†â†â†â† ADVANCE TIME + START WHOOSH â†’â†’â†’â†’â†’
                                     globalSimulationTime += 150000;
                                     showWhoosh = true;
                                     whooshProgress = 0.0f;
                                     whooshClock.restart();
 
-                                    addLog("Journey simulation started — " + to_string(currentPath.totalTimeMinutes / 60) + " hours total");
+                                    addLog("Journey simulation started â€” " + to_string(currentPath.totalTimeMinutes / 60) + " hours total");
                                     showQueryPanel = false;
                                     */
                                 }
@@ -2475,7 +2475,7 @@ struct oceanRouteGraph {
                                 handlePanelAction(btn.action, showQueryPanel);
                             }
                         }
-                        // Clicking inside date box → start typing date
+                        // Clicking inside date box â†’ start typing date
                         float panelX = (windowWidth - 400.0f) / 2.0f;
                         float panelY = 100.0f;
                         float dateBoxX = panelX + 20.0f;
@@ -2529,7 +2529,7 @@ struct oceanRouteGraph {
                         }
                         */
                         if (buildingMultiLeg) {
-                            // ←←←←← CLICK-TO-REMOVE + CLICK-TO-ADD →→→→→
+                            // â†â†â†â†â† CLICK-TO-REMOVE + CLICK-TO-ADD â†’â†’â†’â†’â†’
                             bool removed = false;
                             JourneyLeg* leg = currentJourney.head;
                             while (leg) {
@@ -2537,7 +2537,7 @@ struct oceanRouteGraph {
                                 float dx = clickPosF.x - pos.x;
                                 float dy = clickPosF.y - pos.y;
                                 if (dx * dx + dy * dy < 400) {
-                                    int portToRemove = leg->portIndex;  // ← SAVE FIRST!
+                                    int portToRemove = leg->portIndex;  // â† SAVE FIRST!
                                     string portName = graphPorts[portToRemove]->portName;
 
                                     currentJourney.removeLeg(portToRemove);  // now safe to delete
@@ -2553,7 +2553,7 @@ struct oceanRouteGraph {
                                 currentJourney.addLeg(hoveredPort);
                                 addLog("Added stop: " + graphPorts[hoveredPort]->portName);
                             }
-                            // ←←←←← END →→→→→
+                            // â†â†â†â†â† END â†’â†’â†’â†’â†’
                         }
                         else {
                             // NORMAL MODE: Select origin/destination
@@ -2998,8 +2998,8 @@ struct oceanRouteGraph {
                                     */
 
                                     sf::Color edgeColor = showOnlyActiveRoutes ?
-                                        getCostColor(route->voyageCost) :           // ← COST COLOR IN SUBGRAPH
-                                        sf::Color(120, 30, 30, 180);                // ← DARK RED WHEN NOT FILTERED
+                                        getCostColor(route->voyageCost) :           // â† COST COLOR IN SUBGRAPH
+                                        sf::Color(120, 30, 30, 180);                // â† DARK RED WHEN NOT FILTERED
 
                                     // Highlight if hovered port is either endpoint
                                     /*
@@ -3054,7 +3054,7 @@ struct oceanRouteGraph {
                                 }
                             }
 
-                            // ←←←←← ADD SUBGRAPH FILTER RIGHT HERE →→→→→
+                            // â†â†â†â†â† ADD SUBGRAPH FILTER RIGHT HERE â†’â†’â†’â†’â†’
                             bool edgeVisible = true;
                             if (showOnlyActiveRoutes && !activeCompanyFilter.empty()) {
                                 if (route->shippingCompanyName != activeCompanyFilter) {
@@ -3062,10 +3062,10 @@ struct oceanRouteGraph {
                                 }
                             }
                             if (!edgeVisible) {
-                                route = route->next;   // ← SKIP THIS EDGE
-                                continue;              // ← GO TO NEXT ROUTE
+                                route = route->next;   // â† SKIP THIS EDGE
+                                continue;              // â† GO TO NEXT ROUTE
                             }
-                            // ←←←←← END FILTER →→→→→
+                            // â†â†â†â†â† END FILTER â†’â†’â†’â†’â†’
 
                             sf::Vector2f p2 = graphPorts[destIndex]->position;
                             if (p1.x > 0 && p1.y > 0 && p2.x > 0 && p2.y > 0) {
@@ -3101,7 +3101,7 @@ struct oceanRouteGraph {
                             graphPorts[i]->dockingQueue.size() > 0 &&
                             currentSimTime >= graphPorts[i]->dockingQueue[0].arrivalTime) {
                             graphPorts[i]->currentDocked++;
-                            // First ship is now docked — just leave it in queue[0]
+                            // First ship is now docked â€” just leave it in queue[0]
                         }
 
 
@@ -3120,9 +3120,9 @@ struct oceanRouteGraph {
                                 // Draw dashed line between ships
                                 if (q > 0) {
                                     sf::Vertex dash[] = {
-                                        sf::Vertex(basePos + sf::Vector2f((q - 1) * 20 + 7, 3), sf::Color::Yellow),
-                                        sf::Vertex(basePos + sf::Vector2f(q * 20 + 7, 3), sf::Color::Yellow)
-                                    };
+                                    { sf::Vector2f(basePos) + sf::Vector2f((q - 1) * 20.f + 7.f, 3.f), sf::Color::Yellow },
+                                    { sf::Vector2f(basePos) + sf::Vector2f(q * 20.f + 7.f, 3.f), sf::Color::Yellow }
+                                };
                                     window.draw(dash, 2, sf::PrimitiveType::Lines);
                                 }
                             }
@@ -3138,7 +3138,7 @@ struct oceanRouteGraph {
 
 
                         if (simulationMode) {
-                            // === ANIMATED DOCKING QUEUE — REPLACE YOUR CURRENT ONE WITH THIS ===
+                            // === ANIMATED DOCKING QUEUE â€” REPLACE YOUR CURRENT ONE WITH THIS ===
                             if (graphPorts[i]->dockingQueue.size() > 0 || graphPorts[i]->currentDocked > 0) {
                                 sf::Vector2f portPos = graphPorts[i]->position;
                                 sf::Vector2f queueStart = portPos + sf::Vector2f(40, -60);
@@ -3148,7 +3148,7 @@ struct oceanRouteGraph {
                                 int docked = graphPorts[i]->currentDocked;
                                 int totalInPort = waiting + docked;
 
-                                // Draw docked ships (inside the port — green)
+                                // Draw docked ships (inside the port â€” green)
                                 for (int d = 0; d < docked; d++) {
                                     sf::CircleShape dockedShip(10);
                                     dockedShip.setPosition(portPos + sf::Vector2f(-20 + d * 20, 20));
@@ -3173,9 +3173,10 @@ struct oceanRouteGraph {
 
                                     if (q > 0) {
                                         sf::Vertex dash[] = {
-                                            sf::Vertex(sf::Vector2f(animX + 8, queueStart.y + 4), sf::Color::Yellow),
-                                            sf::Vertex(sf::Vector2f(animX + spacing - 8, queueStart.y + 4), sf::Color::Yellow)
+                                            { sf::Vector2f(animX + 8.f, queueStart.y + 4.f), sf::Color::Yellow },
+                                            { sf::Vector2f(animX + spacing - 8.f, queueStart.y + 4.f), sf::Color::Yellow }
                                         };
+
                                         window.draw(dash, 2, sf::PrimitiveType::Lines);
                                     }
 
@@ -3184,9 +3185,10 @@ struct oceanRouteGraph {
                                         sf::Vector2f from = sf::Vector2f(animX + 8, queueStart.y);
                                         sf::Vector2f to = portPos + sf::Vector2f(-20, 20);
                                         sf::Vertex arrow[] = {
-                                            sf::Vertex(from, sf::Color::Yellow),
-                                            sf::Vertex(to, sf::Color::Yellow)
+                                            { sf::Vector2f(from), sf::Color::Yellow },
+                                            { sf::Vector2f(to), sf::Color::Yellow }
                                         };
+
                                         window.draw(arrow, 2, sf::PrimitiveType::Lines);
                                     }
                                 }
@@ -3435,9 +3437,10 @@ struct oceanRouteGraph {
 
                         // Main line
                         sf::Vertex line[] = {
-                            sf::Vertex(p1, sf::Color::Cyan),
-                            sf::Vertex(p2, sf::Color::Cyan)
+                            { sf::Vector2f(p1), sf::Color::Cyan },
+                            { sf::Vector2f(p2), sf::Color::Cyan }
                         };
+
                         window.draw(line, 2, sf::PrimitiveType::Lines);
 
                         // Arrowhead
@@ -3452,10 +3455,10 @@ struct oceanRouteGraph {
                             sf::Vector2f tip2 = p2 - sf::Vector2f(dir.x * 25 - perp.x * 10, dir.y * 25 - perp.y * 10);
 
                             sf::Vertex arrow[] = {
-                                sf::Vertex(p2, sf::Color::Cyan),
-                                sf::Vertex(tip1, sf::Color::Cyan),
-                                sf::Vertex(p2, sf::Color::Cyan),
-                                sf::Vertex(tip2, sf::Color::Cyan)
+                                { sf::Vector2f(p2), sf::Color::Cyan },
+                                { sf::Vector2f(tip1), sf::Color::Cyan },
+                                { sf::Vector2f(p2), sf::Color::Cyan },
+                                { sf::Vector2f(tip2), sf::Color::Cyan }
                             };
                             window.draw(arrow, 4, sf::PrimitiveType::Lines);
                         }
@@ -3466,7 +3469,7 @@ struct oceanRouteGraph {
                 // === END MULTI-LEG DRAWING ===
 
 
-                // === WHOOSH EFFECT — EPIC SWOOSH ACROSS PATH ===
+                // === WHOOSH EFFECT â€” EPIC SWOOSH ACROSS PATH ===
                 if (showWhoosh && currentPath.found && currentPath.pathSize > 0) {
                     float duration = 5.0f;  // 2 seconds
                     whooshProgress = whooshClock.getElapsedTime().asSeconds() / duration;
@@ -3541,10 +3544,10 @@ struct oceanRouteGraph {
                 sf::Text titleText(font, "SYSTEM LOG", 20);
                 titleText.setFillColor(sf::Color::Cyan);
                 titleText.setStyle(sf::Text::Bold);
-                titleText.setPosition(sf::Vector2f(0.0f, panelY));  // ← FIXED
+                titleText.setPosition(sf::Vector2f(0.0f, panelY));  // â† FIXED
                 window.draw(titleText);
 
-                // ←←←←← ADD AUTO-CLEARING RIGHT HERE →→→→→
+                // â†â†â†â†â† ADD AUTO-CLEARING RIGHT HERE â†’â†’â†’â†’â†’
                 int maxLines = 16;  // how many lines fit in panel
                 if (consoleLines.size() > maxLines) {
                     for (int i = 0; i < maxLines; i++) {
@@ -3552,7 +3555,7 @@ struct oceanRouteGraph {
                     }
                     consoleLines.sz = maxLines;
                 }
-                // ←←←←← END AUTO-CLEARING →→→→→
+                // â†â†â†â†â† END AUTO-CLEARING â†’â†’â†’â†’â†’
 
                 // Draw log lines
                 for (int i = 0; i < consoleLines.size(); i++) {
@@ -3563,7 +3566,7 @@ struct oceanRouteGraph {
                 }
 
                 /*
-                // === REAL-TIME PATHFINDING VISUALIZATION — WORKS 100% ===
+                // === REAL-TIME PATHFINDING VISUALIZATION â€” WORKS 100% ===
                 if (currentPath.found && highlightedPath.size() > 0) {
                     static int animIndex = 0;
                     static sf::Clock animClock;
@@ -3659,4 +3662,3 @@ int main()
 
     return 0;
 }
-
