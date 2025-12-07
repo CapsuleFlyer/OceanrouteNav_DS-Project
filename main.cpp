@@ -485,7 +485,7 @@ struct oceanRouteGraph {
                     direct.path[direct.pathSize++] = destination;
 
                     bookingOptions.push_back(direct);
-                    addLog("DIRECT: " + route->date + " → $" + to_string(direct.totalCost));
+                    addLog("DIRECT: " + route->date + " -> $" + to_string(direct.totalCost));
                 }
             }
             route = route->next;
@@ -544,7 +544,7 @@ struct oceanRouteGraph {
             connected.path[connected.pathSize++] = destination;
 
             bookingOptions.push_back(connected);
-            addLog("1-STOP via " + graphPorts[mid]->portName + " (" + leg1->date + " → " + leg2->date + ")");
+            addLog("1-STOP via " + graphPorts[mid]->portName + " (" + leg1->date + " -> " + leg2->date + ")");
         }
 
         addLog("Found " + to_string(bookingOptions.size()) + " real routes");
@@ -3457,7 +3457,7 @@ struct oceanRouteGraph {
                         sf::Color routeColor = isDirect ? sf::Color(255, 50, 50) : sf::Color(255, 200, 50);
 
                         string type = isDirect ? "DIRECT" : "1-STOP";
-                        sf::Text routeText(font, type + " → $" + to_string(opt.totalCost), 18);
+                        sf::Text routeText(font, type + " -> $" + to_string(opt.totalCost), 18);
                         routeText.setFillColor(textColor);
                         routeText.setStyle(sf::Text::Bold);
                         routeText.setPosition(sf::Vector2f(panelX + 20, panelY + 130 + i * 60));
