@@ -1,16 +1,6 @@
 #pragma once
-#include <cmath>
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <sstream>
-#include <SFML/Graphics.hpp>
-#include <SFML/Window/Event.hpp>
 #include "helper.hpp"
-#define TOTALNUMBEROFPORTS 40
-#define MAX_COST 999999999
 using namespace std;
-
 
 struct oceanRouteGraph {
     // TODO: duration is to be calculated for each route as well
@@ -30,25 +20,21 @@ struct oceanRouteGraph {
     bool useAStar = false;
 
     PathResult currentPath;
-    //int* highlightedPath;
-    //std::vector<int> highlightedPath;
     SimpleVector<int, 1024> highlightedPath;
     int highlightedPathSize;
     int selectedOrigin = -1;
     int selectedDestination = -1;
     string selectedCompany = "";
-    // Mercator projection removed; only using PortCoords.txt
     bool showAlgorithmVisualization = false;
     SimpleVector<int, 512> vizOpenSet;
     SimpleVector<int, 512> vizClosedSet;
 
-    // Add these in your class
     float whooshProgress = 0.0f;        // 0.0 to 1.0
     bool showWhoosh = false;
     sf::Clock whooshClock;
 
 
-    /// QUEUEING LOGIC AND VARIABLES:
+    /// QUEUEING LOGIC AND VARIABLES
     long long globalSimulationTime = 0;  // minutes since start — increases every frame
    
     // We use SimpleVector<WaitingShip> for each company
@@ -87,6 +73,9 @@ struct oceanRouteGraph {
     int layoverPortIndex = -1;
     long long layoverArrivalTime = 0;
     long long layoverNextDeparture = 0;
+
+    MultiLegJourney currentJourney;
+    bool buildingMultiLeg = false;
 
     void addLog(const string& msg) {
         if (consoleFirstTime) {
@@ -150,7 +139,6 @@ struct oceanRouteGraph {
             }
         }
     }
-
 
     void findAllFeasibleRoutes(int origin, int destination, const string& date = "") {
         bookingOptions.clear();
@@ -249,7 +237,6 @@ struct oceanRouteGraph {
         return to_string(totalDays) + "d " + to_string(hours) + ":" + (mins < 10 ? "0" : "") + to_string(mins);
     }
 
-
     oceanRouteGraph() {
         this->capacity = TOTALNUMBEROFPORTS;
         this->currentSize = 0;
@@ -293,15 +280,7 @@ struct oceanRouteGraph {
         
     }
 
-        // ←←←←← YOUR MULTI-LEG CODE GOES HERE — 100% CORRECT →→→→→
-        
-
-        MultiLegJourney currentJourney;
-        bool buildingMultiLeg = false;
-        // ←←←←← END OF MULTI-LEG CODE →→→→→
-
-
-    // parse the string from get line ourselver
+    // parse the string from get line ourselves
     bool stringParsingForRoute(const string& lineFromFile, string& sourceName, string& destinationName, string& date, string& arrivalTime, string& departureTime, int& voyageCost, string& shippingCompanyName) {
         // we are extracting a total of 7 fields from the line 
 
@@ -636,7 +615,6 @@ struct oceanRouteGraph {
         loadPortCoordinates("./PortCoords.txt");
     }
 
-
     void printGraphAfterCreation() {
         if (currentSize == 0) {
             cerr << "No Graph Nodes Exist to Print!" << endl;
@@ -687,7 +665,7 @@ struct oceanRouteGraph {
         return -1;
     }
 
-    int calculateHeuristic(int fromIndex, int toIndex) { //gets the euclidean distance i changed a bit from help but it should work
+    int calculateHeuristic(int fromIndex, int toIndex) { //gets the euclidean distance
         if (fromIndex < 0 || fromIndex >= currentSize || toIndex < 0 || toIndex >= currentSize) {
             return 0;
         }
@@ -731,11 +709,7 @@ struct oceanRouteGraph {
         }
     }
 
-
-    bool parseDateTime(const string& dateStr, const string& timeStr,
-        int& day, int& month, int& year,
-        int& hour, int& minute)
-    {
+    bool parseDateTime(const string& dateStr, const string& timeStr, int& day, int& month, int& year, int& hour, int& minute){
         // Expected formats:
         // date  = "dd/mm/yyyy"
         // time  = "hh:mm"
@@ -754,7 +728,6 @@ struct oceanRouteGraph {
 
         return true;
     }
-
 
     long long parseDateTimeToMinutes(const string& dateStr, const string& timeStr) {
         int day, month, year, hour, minute;
@@ -783,12 +756,7 @@ struct oceanRouteGraph {
         return total;
     }
 
-    PathResult dijkstraShortestPath(
-        int startIndex, int endIndex,
-        const string& preferredCompany = "",
-        const SimpleVector<string>& avoidPorts = {},
-        int maxVoyageHours = -1
-    ) {
+    PathResult dijkstraShortestPath(int startIndex, int endIndex, const string& preferredCompany = "", const SimpleVector<string>& avoidPorts = {}, int maxVoyageHours = -1) {
         PathResult result;
         if (startIndex < 0 || endIndex < 0 || startIndex >= currentSize || endIndex >= currentSize) return result;
 
@@ -911,12 +879,7 @@ struct oceanRouteGraph {
         return result;
     }
 
-    PathResult aStarCheapestWithPrefs(
-        int startIndex, int endIndex,
-        const string& preferredCompany = "",
-        const SimpleVector<string>& avoidPorts = {},
-        int maxVoyageHours = -1
-    ) {
+    PathResult aStarCheapestWithPrefs(int startIndex, int endIndex, const string& preferredCompany = "", const SimpleVector<string>& avoidPorts = {}, int maxVoyageHours = -1) {
         PathResult result;
         if (startIndex < 0 || endIndex < 0) return result;
 
@@ -1075,12 +1038,7 @@ struct oceanRouteGraph {
         return result;
     }
 
-    PathResult dijkstraFastestWithPrefs(
-        int startIndex, int endIndex,
-        const string& preferredCompany = "",
-        const SimpleVector<string>& avoidPorts = {},
-        int maxVoyageHours = -1
-    ) {
+    PathResult dijkstraFastestWithPrefs(int startIndex, int endIndex, const string& preferredCompany = "", const SimpleVector<string>& avoidPorts = {}, int maxVoyageHours = -1) {
         PathResult result;
         if (startIndex < 0 || endIndex < 0) return result;
 
@@ -1223,12 +1181,7 @@ struct oceanRouteGraph {
         return result;
     }
 
-    PathResult aStarFastestWithPrefs(
-        int startIndex, int endIndex,
-        const string& preferredCompany = "",
-        const SimpleVector<string>& avoidPorts = {},
-        int maxVoyageHours = -1
-    ) {
+    PathResult aStarFastestWithPrefs(int startIndex, int endIndex, const string& preferredCompany = "", const SimpleVector<string>& avoidPorts = {}, int maxVoyageHours = -1) {
         PathResult result;
         if (startIndex < 0 || endIndex < 0) return result;
 
@@ -1398,9 +1351,6 @@ struct oceanRouteGraph {
         return result;
     }
 
-    
-
-    // NEW: FASTEST MULTI-LEG ROUTE — SAFE + USES SimpleVector
     SimpleVector<int, 512> findFastestMultiLegPath(const MultiLegJourney& journey, bool useAStar = true) {
         SimpleVector<int, 512> finalPath;
 
@@ -1559,7 +1509,6 @@ struct oceanRouteGraph {
         }
     }
 
-
     sf::Color getCostColor(int cost) const {
         if (cost < 15000) return sf::Color(100, 255, 150, 200);      // Green - Low cost
         else if (cost < 25000) return sf::Color(255, 230, 100, 200); // Yellow - Medium cost
@@ -1637,7 +1586,6 @@ struct oceanRouteGraph {
         file.close();
         return true;
     }
-
 
     void handlePanelAction(const string& action, bool& showQueryPanel)
     {
@@ -1846,7 +1794,6 @@ struct oceanRouteGraph {
         sf::sleep(sf::milliseconds(100));
     }
     
-
     void visualizeGraph(int windowWidth = 1800, int windowHeight = 900) {
         // Try to load optional coordinates and world map before assigning positions
         // If a PortCoords.txt file exists in the workspace, load it
