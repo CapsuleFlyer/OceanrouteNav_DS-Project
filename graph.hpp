@@ -1449,18 +1449,21 @@ struct oceanRouteGraph {
             }
             addLog("==========================");
 
-            cout << "Path: ";
-            for (int i = 0; i < currentPath.pathSize; i++) {
-                cout << graphPorts[currentPath.path[i]]->portName;
-                if (i < currentPath.pathSize - 1) cout << " -> ";
-            }
-
             // Copy to highlightedPath
             highlightedPath.clear();
             for (int i = 0; i < currentPath.pathSize; i++) {
                 highlightedPath.push_back(currentPath.path[i]);
             }
-            cout << endl;
+            
+            // === LOG THE FULL PATH TO CONSOLE PANEL ===
+            string pathStr = "Path: ";
+            for (int i = 0; i < currentPath.pathSize; i++) {
+                pathStr += graphPorts[currentPath.path[i]]->portName;
+                if (i < currentPath.pathSize - 1) {
+                    pathStr += " to ";
+                }
+            }
+            addLog(pathStr);
         }
         else {
             cout << "\nNo route found." << endl;
@@ -1498,18 +1501,20 @@ struct oceanRouteGraph {
             addLog("From: " + graphPorts[originIndex]->portName);
             
 
-            cout << "Path: ";
-            for (int i = 0; i < currentPath.pathSize; i++) {
-                cout << graphPorts[currentPath.path[i]]->portName;
-                if (i < currentPath.pathSize - 1) cout << " -> ";
-            }
-            cout << endl;
-
             // Copy to highlightedPath
             highlightedPath.clear();
             for (int i = 0; i < currentPath.pathSize; i++) {
                 highlightedPath.push_back(currentPath.path[i]);
             }
+            // === LOG THE FULL PATH TO CONSOLE PANEL ===
+            string pathStr = "Path: ";
+            for (int i = 0; i < currentPath.pathSize; i++) {
+                pathStr += graphPorts[currentPath.path[i]]->portName;
+                if (i < currentPath.pathSize - 1) {
+                    pathStr += " to ";
+                }
+            }
+            addLog(pathStr);
         }
         else {
             cout << "\nNo route found." << endl;
