@@ -10,7 +10,20 @@ int main()
     graphObj.printGraphAfterCreation();
 
     cout << "\nLaunching interactive graph visualization..." << endl;
-    graphObj.visualizeGraph(1800, 980);
+
+    try {
+        graphObj.visualizeGraph(1800, 980);
+    }
+    catch (const exception& e) {
+        cerr << "Program crashed: " << e.what() << endl;
+        system("pause");  // Windows – keeps console open
+        return 1;
+    }
+    catch (...) {
+        cerr << "Unknown error – program terminated safely." << endl;
+        system("pause");
+        return 1;
+    }
 
     return 0;
 }

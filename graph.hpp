@@ -314,7 +314,8 @@ struct oceanRouteGraph {
                     departureTime = currentString;
                     break;
                 case 5:
-                    voyageCost = stoi(currentString); // using a sting to int converter as the currentString is a string and the voyageCost is an int variable
+                    try { voyageCost = stoi(currentString); }
+                    catch (...) { voyageCost = 0; return false; } // using a sting to int converter as the currentString is a string and the voyageCost is an int variable
                     break;
                 case 6: // NOTE: this part doesn't actually work and isnt needed as the last currentString won't have a terminator -- meaning -- the string will reach its end without hitting a space so the loop will exit -- hence thelogic for this exists outside the loop
                     shippingCompanyName = currentString;
@@ -336,7 +337,8 @@ struct oceanRouteGraph {
                 shippingCompanyName = currentString;
             }
             else if (currentField == 5) { // TODO: prolly remove this as it wont be needed
-                voyageCost = stoi(currentString);
+                try { voyageCost = stoi(currentString); }
+                catch (...) { voyageCost = 0; return false; }
             }
 
             currentField++;
@@ -354,7 +356,8 @@ struct oceanRouteGraph {
             return false;
         }
 
-        voyageCost = stoi(voyageCostString);
+        try { voyageCost = stoi(voyageCostString); }
+        catch (...) { voyageCost = 0; return false; }
         // TODO: learn logic behind string stream
 
         string leftOverString;
@@ -379,7 +382,8 @@ struct oceanRouteGraph {
                     nameOfPort = currentString;
                     break;
                 case 1:
-                    dailyChargesOfPort = stoi(currentString);
+                    try { dailyChargesOfPort = stoi(currentString); }
+                    catch (...) { dailyChargesOfPort = 0; return false; }       
                     break;
                 }
 
@@ -392,7 +396,8 @@ struct oceanRouteGraph {
         if (currentStartingLetter < currentCharPointer) {
             string currentString(currentStartingLetter, currentCharPointer - currentStartingLetter);
             if (currentField == 1) {
-                dailyChargesOfPort = stoi(currentString);
+                try { dailyChargesOfPort = stoi(currentString); }
+                catch (...) { dailyChargesOfPort = 0; return false; }
             }
             else if (currentField == 0) {
                 nameOfPort = currentString;
@@ -412,7 +417,8 @@ struct oceanRouteGraph {
             return false;
         }
 
-        dailyChargesOfPort = stoi(dailyChargesString);
+        try { dailyChargesOfPort = stoi(dailyChargesString); }
+        catch (...) { dailyChargesOfPort = 0; return false; }
 
         string leftOverString;
         if (ss >> leftOverString) {
@@ -710,24 +716,25 @@ struct oceanRouteGraph {
     }
 
     bool parseDateTime(const string& dateStr, const string& timeStr, int& day, int& month, int& year, int& hour, int& minute){
-        // Expected formats:
-        // date  = "dd/mm/yyyy"
-        // time  = "hh:mm"
+    if (dateStr.size() < 10 || timeStr.size() < 5) return false;
 
-        if (dateStr.size() < 10 || timeStr.size() < 4)
+    try {
+        day    = stoi(dateStr.substr(0,2));
+        month  = stoi(dateStr.substr(3,2));
+        year   = stoi(dateStr.substr(6,4));
+        hour   = stoi(timeStr.substr(0,2));
+        minute = stoi(timeStr.substr(3,2));
+
+        // Basic sanity checks
+        if (day < 1 || day > 31 || month < 1 || month > 12 || year < 1000 || hour > 23 || minute > 59)
             return false;
-
-        // Parse date
-        day = stoi(dateStr.substr(0, 2));
-        month = stoi(dateStr.substr(3, 2));
-        year = stoi(dateStr.substr(6, 4));
-
-        // Parse time
-        hour = stoi(timeStr.substr(0, 2));
-        minute = stoi(timeStr.substr(3, 2));
 
         return true;
     }
+    catch (...) {
+        return false;   // any stoi failure → treat as invalid
+    }
+}
 
     long long parseDateTimeToMinutes(const string& dateStr, const string& timeStr) {
         int day, month, year, hour, minute;
@@ -1594,7 +1601,7 @@ struct oceanRouteGraph {
         if (action == "Find Cheapest Route") {
             if (selectedOrigin != -1 && selectedDestination != -1) {
                 highlightedPath.clear();  // ← THIS FIXES THE HIGHLIGHT BUG
-                string companyToUse = showOnlyActiveRoutes ? activeCompanyFilter : selectedCompany;
+                string companyToUse = showOnlyActiveRoutes ? activeCompanyFilter : "";
                 // Always use COST-BASED algorithms for "Cheapest"
                 if (useAStar)
                     currentPath = aStarCheapestWithPrefs(selectedOrigin, selectedDestination, companyToUse);
@@ -1622,7 +1629,7 @@ struct oceanRouteGraph {
         else if (action == "Find Fastest Route") {
             if (selectedOrigin != -1 && selectedDestination != -1) {
                 highlightedPath.clear();  // ← THIS FIXES THE HIGHLIGHT BUG
-                string companyToUse = showOnlyActiveRoutes ? activeCompanyFilter : selectedCompany;
+                string companyToUse = showOnlyActiveRoutes ? activeCompanyFilter : "";
                 // Always use TIME-BASED algorithms for "Fastest"
                 if (useAStar)
                     currentPath = aStarFastestWithPrefs(selectedOrigin, selectedDestination, companyToUse);
