@@ -2117,8 +2117,8 @@ struct oceanRouteGraph {
                 int v = getPortIndex(r->destinationName);
                 if (v != -1 && graphPorts[v]) {
                     sf::Vertex line[] = {
-                        sf::Vertex(graphPorts[i]->position, sf::Color(80,80,80,80)),
-                        sf::Vertex(graphPorts[v]->position, sf::Color(80,80,80,80))
+                        { sf::Vector2f(graphPorts[i]->position), sf::Color(80,80,80,80)},
+                        { sf::Vector2f(graphPorts[v]->position), sf::Color(80,80,80,80)}
                     };
                     window.draw(line, 2, sf::PrimitiveType::Lines);
                 }
@@ -2920,8 +2920,8 @@ struct oceanRouteGraph {
                                 // Draw dashed line between ships
                                 if (q > 0) {
                                     sf::Vertex dash[] = {
-                                        sf::Vertex(basePos + sf::Vector2f((q - 1) * 20 + 7, 3), sf::Color::Yellow),
-                                        sf::Vertex(basePos + sf::Vector2f(q * 20 + 7, 3), sf::Color::Yellow)
+                                        { sf::Vector2f(basePos + sf::Vector2f((q - 1) * 20 + 7, 3)), sf::Color::Yellow},
+                                        { sf::Vector2f(basePos + sf::Vector2f(q * 20 + 7, 3)), sf::Color::Yellow}
                                     };
                                     window.draw(dash, 2, sf::PrimitiveType::Lines);
                                 }
@@ -2973,8 +2973,8 @@ struct oceanRouteGraph {
 
                                     if (q > 0) {
                                         sf::Vertex dash[] = {
-                                            sf::Vertex(sf::Vector2f(animX + 8, queueStart.y + 4), sf::Color::Yellow),
-                                            sf::Vertex(sf::Vector2f(animX + spacing - 8, queueStart.y + 4), sf::Color::Yellow)
+                                            { sf::Vector2f(sf::Vector2f(animX + 8, queueStart.y + 4)), sf::Color::Yellow },
+                                            { sf::Vector2f(sf::Vector2f(animX + spacing - 8, queueStart.y + 4)), sf::Color::Yellow }
                                         };
                                         window.draw(dash, 2, sf::PrimitiveType::Lines);
                                     }
@@ -2984,8 +2984,8 @@ struct oceanRouteGraph {
                                         sf::Vector2f from = sf::Vector2f(animX + 8, queueStart.y);
                                         sf::Vector2f to = portPos + sf::Vector2f(-20, 20);
                                         sf::Vertex arrow[] = {
-                                            sf::Vertex(from, sf::Color::Yellow),
-                                            sf::Vertex(to, sf::Color::Yellow)
+                                            { sf::Vector2f(from), sf::Color::Yellow},
+                                            { sf::Vector2f(to), sf::Color::Yellow}
                                         };
                                         window.draw(arrow, 2, sf::PrimitiveType::Lines);
                                     }
@@ -3229,8 +3229,8 @@ struct oceanRouteGraph {
 
                         // Main line
                         sf::Vertex line[] = {
-                            sf::Vertex(p1, sf::Color::Cyan),
-                            sf::Vertex(p2, sf::Color::Cyan)
+                            { sf::Vector2f(p1), sf::Color::Cyan},
+                            { sf::Vector2f(p2), sf::Color::Cyan}
                         };
                         window.draw(line, 2, sf::PrimitiveType::Lines);
 
@@ -3246,10 +3246,10 @@ struct oceanRouteGraph {
                             sf::Vector2f tip2 = p2 - sf::Vector2f(dir.x * 25 - perp.x * 10, dir.y * 25 - perp.y * 10);
 
                             sf::Vertex arrow[] = {
-                                sf::Vertex(p2, sf::Color::Cyan),
-                                sf::Vertex(tip1, sf::Color::Cyan),
-                                sf::Vertex(p2, sf::Color::Cyan),
-                                sf::Vertex(tip2, sf::Color::Cyan)
+                                { sf::Vector2f(p2), sf::Color::Cyan},
+                                { sf::Vector2f(tip1), sf::Color::Cyan},
+                                { sf::Vector2f(p2), sf::Color::Cyan},
+                                { sf::Vector2f(tip2), sf::Color::Cyan}
                             };
                             window.draw(arrow, 4, sf::PrimitiveType::Lines);
                         }
@@ -3472,8 +3472,8 @@ struct oceanRouteGraph {
 
                             // GLOW (faint outer line)
                             sf::Vertex glow[] = {
-                                sf::Vertex(p1, sf::Color(routeColor.r, routeColor.g, routeColor.b, 80)),
-                                sf::Vertex(p2, sf::Color(routeColor.r, routeColor.g, routeColor.b, 80))
+                                { sf::Vector2f(p1), sf::Color(routeColor.r, routeColor.g, routeColor.b, 80)},
+                                { sf::Vector2f(p2), sf::Color(routeColor.r, routeColor.g, routeColor.b, 80)}
                             };
                             sf::VertexArray glowLines(sf::PrimitiveType::Lines, 2);
                             glowLines[0].position = p1; glowLines[0].color = sf::Color(routeColor.r, routeColor.g, routeColor.b, 80);
@@ -3482,8 +3482,8 @@ struct oceanRouteGraph {
 
                             // THICK MAIN LINE
                             sf::Vertex main[] = {
-                                sf::Vertex(p1, routeColor),
-                                sf::Vertex(p2, routeColor)
+                                { sf::Vector2f(p1), routeColor},
+                                { sf::Vector2f(p2), routeColor}
                             };
                             sf::VertexArray mainLines(sf::PrimitiveType::Lines, 2);
                             mainLines[0].position = p1; mainLines[0].color = routeColor;
@@ -3500,10 +3500,10 @@ struct oceanRouteGraph {
                                 sf::Vector2f tip2 = p2 - (dir * 30.0f) - (perp * 15.0f);
 
                                 sf::Vertex arrow[] = {
-                                    sf::Vertex(p2, routeColor),
-                                    sf::Vertex(tip1, routeColor),
-                                    sf::Vertex(p2, routeColor),
-                                    sf::Vertex(tip2, routeColor)
+                                    { sf::Vector2f(p2), routeColor},
+                                    { sf::Vector2f(tip1), routeColor},
+                                    { sf::Vector2f(p2), routeColor},
+                                    { sf::Vector2f(tip2), routeColor}
                                 };
                                 window.draw(arrow, 4, sf::PrimitiveType::Lines);
                             }
@@ -3552,8 +3552,8 @@ struct oceanRouteGraph {
 
                         // Full segment (already revealed)
                         sf::Vertex line[] = {
-                            sf::Vertex(p1, routeColor),
-                            sf::Vertex(p2, routeColor)
+                            { sf::Vector2f(p1), routeColor},
+                            { sf::Vector2f(p2), routeColor}
                         };
                         window.draw(line, 2, sf::PrimitiveType::Lines);
                     }
@@ -3568,8 +3568,8 @@ struct oceanRouteGraph {
 
                         // Glowing segment
                         sf::Vertex animLine[] = {
-                            sf::Vertex(p1, routeColor),
-                            sf::Vertex(currentPos, routeColor)
+                            { sf::Vector2f(p1), routeColor},
+                            { sf::Vector2f(currentPos), routeColor}
                         };
                         window.draw(animLine, 2, sf::PrimitiveType::Lines);
 
